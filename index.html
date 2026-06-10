@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1a1917">
+<meta name="description" content="Vesta — Protégez, faites fructifier et investissez votre patrimoine.">
+<title>Vesta</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/public/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/public/icons/icon-192.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+<link rel="stylesheet" href="/src/styles.css?v=accounts-1">
+<script src="/src/app.js?v=accounts-1" defer></script>
+<script src="/src/agents.js?v=agents-1" defer></script>
+</head>
+<body>
+
+<div id="pin-screen">
+  <div class="auth-card" style="text-align:center">
+    <div style="margin-bottom:.5rem">
+      <svg width="44" height="60" viewBox="-42 -68 84 114" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M0,-60 C20,-40 35,-10 20,20 C10,40 -10,40 -20,20 C-35,-10 -20,-40 0,-60 Z" fill="#E8A020" opacity="0.9"/>
+        <path d="M0,-30 C10,-15 16,5 8,20 C3,30 -3,30 -8,20 C-16,5 -10,-15 0,-30 Z" fill="#F5C842" opacity="0.95"/>
+        <circle cx="0" cy="14" r="5" fill="#FDE68A"/>
+        <path d="M-28,28 Q0,38 28,28" stroke="#E8A020" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.7"/>
+      </svg>
+    </div>
+    <div class="auth-logo">VESTA</div>
+    <div class="auth-sub" id="pin-subtitle">Entrez votre code PIN</div>
+    <div class="pin-dots" id="pin-dots">
+      <span class="pin-dot"></span>
+      <span class="pin-dot"></span>
+      <span class="pin-dot"></span>
+      <span class="pin-dot"></span>
+    </div>
+    <div id="pin-err"></div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pinKey('1')">1</button>
+      <button class="pin-key" onclick="pinKey('2')">2</button>
+      <button class="pin-key" onclick="pinKey('3')">3</button>
+      <button class="pin-key" onclick="pinKey('4')">4</button>
+      <button class="pin-key" onclick="pinKey('5')">5</button>
+      <button class="pin-key" onclick="pinKey('6')">6</button>
+      <button class="pin-key" onclick="pinKey('7')">7</button>
+      <button class="pin-key" onclick="pinKey('8')">8</button>
+      <button class="pin-key" onclick="pinKey('9')">9</button>
+      <button class="pin-key pin-key-del" onclick="pinKey('del')">⌫</button>
+      <button class="pin-key" onclick="pinKey('0')">0</button>
+      <button class="pin-key pin-key-ok" onclick="submitPin()">✓</button>
+    </div>
+  </div>
+</div>
+
+<div class="mobile-toggle" onclick="document.querySelector('.sidebar').classList.toggle('open')">
+  ☰ &nbsp; Vesta
+</div>
+
+<div class="app">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="logo">
+    <div style="display:flex;align-items:center;gap:9px">
+      <svg width="20" height="27" viewBox="-42 -68 84 114" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="flex-shrink:0">
+        <path d="M0,-60 C20,-40 35,-10 20,20 C10,40 -10,40 -20,20 C-35,-10 -20,-40 0,-60 Z" fill="#E8A020" opacity="0.9"/>
+        <path d="M0,-30 C10,-15 16,5 8,20 C3,30 -3,30 -8,20 C-16,5 -10,-15 0,-30 Z" fill="#F5C842" opacity="0.95"/>
+        <circle cx="0" cy="14" r="5" fill="#FDE68A"/>
+        <path d="M-28,28 Q0,38 28,28" stroke="#E8A020" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.7"/>
+      </svg>
+      <div>
+        <div class="logo-mark">Vesta</div>
+        <div class="logo-sub"><span id="user-display-name">Profil</span></div>
+      </div>
+    </div>
+  </div>
+
+  <nav>
+    <div class="nav-section">
+      <div class="nav-label">Tableau de bord</div>
+      <div class="nav-item active" onclick="go('dashboard',this)"><span class="icon">◈</span> Vue d'ensemble</div>
+      <div class="nav-item" onclick="go('transactions',this)"><span class="icon">↕</span> Transactions</div>
+      <div class="nav-item" onclick="go('budget',this)"><span class="icon">◎</span> Budget</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Patrimoine</div>
+      <div class="nav-item" onclick="go('patrimoine',this)"><span class="icon">◇</span> Patrimoine</div>
+      <div class="nav-item" onclick="go('epargne',this)"><span class="icon">△</span> Épargne & invest.</div>
+      <div class="nav-item" onclick="go('bourse',this)"><span class="icon">◉</span> Bourse</div>
+      <div class="nav-item" onclick="go('abonnements',this)"><span class="icon">○</span> Crédits & Abonnements</div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Outils</div>
+      <div class="nav-item" onclick="go('import',this)"><span class="icon">↑</span> Importer</div>
+      <div class="nav-item" onclick="go('conseiller',this)"><span class="icon">✦</span> Conseiller IA</div>
+      <div class="nav-item" onclick="go('settings',this)"><span class="icon">⚙</span> Paramètres</div>
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+<div id="sf-rev" style="font-size:11px;color:var(--text3);margin-top:4px"></div>
+    <div id="sf-disp" style="font-size:11px;color:var(--text3)"></div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+<!-- DASHBOARD -->
+<div id="sec-dashboard" class="sec on">
+  <div class="page-header">
+    <div class="page-title">Vue d'ensemble</div>
+    <div class="page-sub" id="dash-period">Tableau de bord personnel</div>
+  </div>
+
+  <div class="mg" id="dash-metrics">
+    <div class="metric"><div class="metric-label">Mes revenus</div><div class="metric-value g" id="dm-rev">— €</div><div class="metric-delta">nets / mois</div></div>
+    <div class="metric"><div class="metric-label">Contribution foyer</div><div class="metric-value r" id="dm-cf">— €</div><div class="metric-delta">versé compte joint</div></div>
+    <div class="metric"><div class="metric-label">Disponible net</div><div class="metric-value b" id="dm-disp">— €</div><div class="metric-delta">à allouer</div></div>
+    <div class="metric"><div class="metric-label">Total liquidités</div><div class="metric-value p" id="dm-total-liq">— €</div><div class="metric-delta">tous comptes</div></div>
+    <div class="metric" style="cursor:pointer" onclick="go('abonnements',document.querySelector('[onclick*=abonnements]'))"><div class="metric-label">Crédits & Abonnements</div><div class="metric-value r" id="dm-abo">— €</div><div class="metric-delta">/ mois</div></div>
+  </div>
+
+  <div class="card accounts-card">
+    <div class="card-title">Mes comptes</div>
+    <div id="accounts-list">
+      <div style="padding:1.5rem;text-align:center;font-size:13px;color:var(--text3)">Aucun compte configuré · <button class="btn btn-sm" onclick="go('settings',document.querySelector('[onclick*=settings]'))">Ajouter un compte</button></div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <div class="card-title">Flux mensuels</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="c-flux" role="img" aria-label="Flux mensuels entrées sorties">Flux mensuels</canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Répartition budget</div>
+      <div class="chart-wrap" style="height:160px"><canvas id="c-donut" role="img" aria-label="Répartition du budget">Répartition budget</canvas></div>
+      <div class="legend-row" style="margin-top:10px" id="donut-legend">
+        <span style="font-size:11px;color:var(--text3)">Renseignez votre budget pour voir la répartition</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Dernières transactions <span><button class="btn btn-sm" onclick="go('transactions',document.querySelector('[onclick*=transactions]'))">Voir tout</button></span></div>
+    <div id="dash-recent-tx"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Alertes & points d'attention</div>
+    <div id="dash-alerts"></div>
+  </div>
+</div>
+
+<!-- TRANSACTIONS -->
+<div id="sec-transactions" class="sec">
+  <div class="page-header">
+    <div class="page-title">Transactions</div>
+    <div class="page-sub">Toutes les entrées et sorties</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Ajouter une transaction</div>
+    <div class="form-grid three">
+      <div class="form-group">
+        <label class="form-label">Date</label>
+        <input type="date" id="tx-date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Libellé</label>
+        <input type="text" id="tx-label" placeholder="Ex: Leclerc, Netflix...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Montant (€)</label>
+        <input type="number" id="tx-amount" placeholder="Ex: -45.50 ou +3000" step="0.01">
+      </div>
+    </div>
+    <div class="form-grid three">
+      <div class="form-group">
+        <label class="form-label">Catégorie</label>
+        <select id="tx-cat">
+          <option value="salaire">Salaire / revenus</option>
+          <option value="immo">Crédit immobilier</option>
+          <option value="credit">Crédit / assurances</option>
+          <option value="alimentation">Alimentation</option>
+          <option value="restaurant">Restaurants / cafés</option>
+          <option value="sante">Santé / pharmacie</option>
+          <option value="transport">Transport / carburant</option>
+          <option value="loisirs">Loisirs / sport / culture</option>
+          <option value="vetements">Vêtements</option>
+          <option value="voyage">Voyage</option>
+          <option value="travaux">Travaux / maison</option>
+          <option value="abonnement">Abonnements</option>
+          <option value="epargne">Épargne / virement</option>
+          <option value="divers">Divers</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Compte</label>
+        <select id="tx-account">
+          <option value="">— Compte —</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optionnel)</label>
+        <input type="text" id="tx-note" placeholder="Note...">
+      </div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="addTx()">Ajouter</button>
+      <button class="btn" onclick="clearTxForm()">Effacer</button>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap">
+    <input type="text" id="tx-search" placeholder="Rechercher..." style="flex:1;min-width:150px" oninput="renderTx()">
+    <select id="tx-filter-cat" onchange="renderTx()" style="min-width:140px">
+      <option value="">Toutes catégories</option>
+      <option value="salaire">Salaire</option>
+      <option value="alimentation">Alimentation</option>
+      <option value="restaurant">Restaurants</option>
+      <option value="abonnement">Abonnements</option>
+      <option value="voyage">Voyage</option>
+      <option value="travaux">Travaux</option>
+      <option value="sante">Santé</option>
+      <option value="epargne">Épargne</option>
+    </select>
+    <select id="tx-filter-type" onchange="renderTx()">
+      <option value="">Tout</option>
+      <option value="credit">Crédits</option>
+      <option value="debit">Débits</option>
+    </select>
+    <select id="tx-filter-account" onchange="renderTx()">
+      <option value="">Tous comptes</option>
+    </select>
+    <input type="file" id="tx-import-input" accept=".csv,.txt" style="display:none" onchange="handleTxImportFile(this)">
+    <button class="btn" onclick="document.getElementById('tx-import-input').click()" title="Importer un fichier CSV dans le compte sélectionné">Importer CSV</button>
+  </div>
+  <div id="tx-import-notif" style="display:none;margin-bottom:0.75rem"></div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <div class="tx-grid">
+      <div class="tx-grid-head">
+        <div>Date</div>
+        <div>Libellé</div>
+        <div>Catégorie</div>
+        <div>Compte</div>
+        <div>Montant</div>
+        <div></div>
+      </div>
+      <div id="tx-tbody"></div>
+    </div>
+  </div>
+  <div id="tx-summary" style="font-size:11px;color:var(--text3);margin-top:6px;font-family:var(--mono)"></div>
+</div>
+
+<!-- BUDGET -->
+<div id="sec-budget" class="sec">
+  <div class="page-header">
+    <div class="page-title">Budget mensuel</div>
+    <div class="page-sub">Ajuste les curseurs pour simuler différents scénarios</div>
+  </div>
+
+  <div class="mg">
+    <div class="metric"><div class="metric-label">Mes revenus</div><div class="metric-value g" id="bm-rev">— €</div></div>
+    <div class="metric"><div class="metric-label">Contribution foyer</div><div class="metric-value r" id="bm-cf">— €</div></div>
+    <div class="metric"><div class="metric-label">Dépenses var.</div><div class="metric-value a" id="bm-dv">— €</div></div>
+    <div class="metric"><div class="metric-label">Disponible</div><div class="metric-value b" id="bm-disp">— €</div></div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <div class="card-title">Mes paramètres</div>
+      <div class="sl-row"><label>Mes revenus nets (€)</label><input type="range" min="0" max="10000" step="50" value="0" id="sl-rev" oninput="calcBudget()"><span id="sl-rev-out">0 €</span></div>
+      <div class="sl-row"><label>Contribution compte joint (€)</label><input type="range" min="0" max="5000" step="50" value="0" id="sl-contrib" oninput="calcBudget()"><span id="sl-contrib-out">0 €</span></div>
+      <div class="sl-row"><label>Dépenses variables perso (€)</label><input type="range" min="0" max="2000" step="50" value="0" id="sl-dv" oninput="calcBudget()"><span id="sl-dv-out">0 €</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Répartition dépenses variables</div>
+      <div class="chart-wrap" style="height:220px"><canvas id="c-var" role="img" aria-label="Répartition des dépenses variables par catégorie">Dépenses variables</canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Contributions compte joint</div>
+    <div class="two" style="gap:12px;margin-bottom:0">
+      <div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:8px">Moi</div>
+        <div class="sl-row" style="margin-bottom:0"><label>Versement mensuel (€)</label><input type="range" min="0" max="5000" step="50" value="0" id="sl-contrib-e" oninput="calcJoint()"><span id="sl-contrib-e-out">0 €</span></div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:8px">Partenaire</div>
+        <div class="sl-row" style="margin-bottom:0"><label>Versement mensuel (€)</label><input type="range" min="0" max="10000" step="100" value="0" id="sl-contrib-as" oninput="calcJoint()"><span id="sl-contrib-as-out">0 €</span></div>
+      </div>
+    </div>
+    <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;text-align:center">
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:10px 8px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Total versé</div>
+        <div style="font-family:var(--mono);font-weight:600" id="joint-total">0 €</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:10px 8px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Charges joint</div>
+        <div style="font-family:var(--mono);font-weight:600;color:var(--red)" id="joint-charges">— €</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:10px 8px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Marge joint</div>
+        <div style="font-family:var(--mono);font-weight:600" id="joint-marge">0 €</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:10px 8px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Ma part</div>
+        <div style="font-family:var(--mono);font-weight:600" id="joint-part">0 %</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Taux d'endettement</div>
+    <div class="row"><span class="row-label">Crédits immo / revenus</span><span class="row-value" id="taux-immo">0,0 %</span></div>
+    <div class="pbar"><div class="pfill" id="pf-immo" style="background:#7a4f0d;width:0%"></div></div>
+    <div class="row" style="margin-top:12px"><span class="row-label">Tous crédits / revenus</span><span class="row-value" id="taux-total">0,0 %</span></div>
+    <div class="pbar"><div class="pfill" id="pf-total" style="background:#8b2020;width:0%"></div></div>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px">Seuil recommandé : 35 %</div>
+  </div>
+</div>
+
+<!-- PATRIMOINE -->
+<div id="sec-patrimoine" class="sec">
+  <div class="page-header">
+    <div class="page-title">Patrimoine</div>
+    <div class="page-sub">Vue consolidée de vos actifs et passifs</div>
+  </div>
+
+  <div class="mg">
+    <div class="metric"><div class="metric-label">Financier</div><div class="metric-value g" id="pat-fin">— €</div></div>
+    <div class="metric"><div class="metric-label">Immobilier net</div><div class="metric-value b" id="pat-immo">— €</div></div>
+    <div class="metric"><div class="metric-label">Total net</div><div class="metric-value p" id="pat-total">— €</div></div>
+    <div class="metric"><div class="metric-label">Dettes</div><div class="metric-value r" id="pat-dettes">— €</div></div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <div class="card-title">Placements financiers</div>
+      <div id="pat-placements-list">
+        <div style="color:var(--text3);font-size:13px;padding:1rem 0;text-align:center">Ajoutez des comptes épargne et investissement dans <button class="btn btn-sm" onclick="go('settings',document.querySelector('[onclick*=settings]'))">Paramètres</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        Immobilier
+        <span>
+          <input type="file" id="credit-immo-input" accept=".csv,.txt,.pdf,application/pdf" style="display:none" onchange="importCreditImmo(this)">
+          <button class="btn btn-sm" onclick="document.getElementById('credit-immo-input').click()">Importer tableau</button>
+        </span>
+      </div>
+      <div id="pat-immo-credits"></div>
+      <div style="height:1px;background:var(--border);margin:12px 0"></div>
+      <div class="row"><span class="row-label">Valeur estimée (total)</span><span class="row-value" id="pat-valeur-bien">— €</span></div>
+      <div class="row"><span class="row-label">Capital restant dû</span><span class="row-value rv-r" id="pat-capital-restant">— €</span></div>
+      <div class="row" style="font-weight:500"><span class="row-label">Valeur nette immobilier</span><span class="row-value rv-g" id="pat-valeur-nette">— €</span></div>
+      <div id="pat-immo-notif" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Projection patrimoine net</div>
+    <div class="chart-wrap" style="height:200px"><canvas id="c-pat" role="img" aria-label="Projection patrimoine net">Projection patrimoine</canvas></div>
+  </div>
+</div>
+
+<!-- ÉPARGNE -->
+<div id="sec-epargne" class="sec">
+  <div class="page-header">
+    <div class="page-title">Épargne & investissement</div>
+    <div class="page-sub">Stratégie d'allocation mensuelle</div>
+  </div>
+
+  <div class="mg">
+    <div class="metric"><div class="metric-label">Capacité mensuelle</div><div class="metric-value g" id="em-cap">— €</div></div>
+    <div class="metric"><div class="metric-label">Précaution</div><div class="metric-value b" id="em-prec">— €</div></div>
+    <div class="metric"><div class="metric-label">Projets</div><div class="metric-value a" id="em-proj">— €</div></div>
+    <div class="metric"><div class="metric-label">Investissement</div><div class="metric-value p" id="em-inv">— €</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Répartition mensuelle</div>
+    <div class="sl-row"><label>Précaution (livrets) %</label><input type="range" min="0" max="50" step="5" value="30" id="sl-pp" oninput="calcEpargne()"><span id="sl-pp-out">30 %</span></div>
+    <div class="sl-row"><label>Projets / travaux %</label><input type="range" min="0" max="30" step="5" value="15" id="sl-pj" oninput="calcEpargne()"><span id="sl-pj-out">15 %</span></div>
+    <div class="sl-row"><label>Investissement %</label><input type="range" min="0" max="70" step="5" value="55" id="sl-pi" oninput="calcEpargne()"><span id="sl-pi-out">55 %</span></div>
+    <div class="alloc-bar" id="epargne-bar">
+      <div class="alloc-seg" style="background:#1a6b4a;width:30%"></div>
+      <div class="alloc-seg" style="background:#7a4f0d;width:15%"></div>
+      <div class="alloc-seg" style="background:#4a3080;width:55%"></div>
+    </div>
+    <div class="legend-row" id="epargne-legend">
+      <span class="leg-item"><span class="leg-dot" style="background:#1a6b4a"></span><span id="ll-p">Précaution · 30 %</span></span>
+      <span class="leg-item"><span class="leg-dot" style="background:#7a4f0d"></span><span id="ll-j">Projets · 15 %</span></span>
+      <span class="leg-item"><span class="leg-dot" style="background:#4a3080"></span><span id="ll-i">Investissement · 55 %</span></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Recommandation versement mensuel</div>
+    <div class="row"><span class="row-label">Investissement mensuel suggéré</span><span class="row-value rv-p" id="rv-tr-sugg">— €/mois</span></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Simulation investissement</div>
+    <div class="sl-row"><label>Versement mensuel (€)</label><input type="range" min="100" max="5000" step="100" value="500" id="sl-tr" oninput="calcTR()"><span id="sl-tr-out">500 €</span></div>
+    <div class="sl-row"><label>Rendement annuel (%)</label><input type="range" min="4" max="12" step="0.5" value="7" id="sl-rd" oninput="calcTR()"><span id="sl-rd-out">7,0 %</span></div>
+    <div class="chart-wrap" style="height:200px"><canvas id="c-tr" role="img" aria-label="Simulation investissement sur 20 ans">Simulation investissement</canvas></div>
+    <div class="three" style="margin-top:12px;gap:8px">
+      <div style="text-align:center;padding:10px;background:var(--surface2);border-radius:var(--radius)"><div style="font-size:11px;color:var(--text3)">5 ans</div><div style="font-size:16px;font-weight:500;font-family:var(--mono);color:var(--purple)" id="tr-5">—</div></div>
+      <div style="text-align:center;padding:10px;background:var(--surface2);border-radius:var(--radius)"><div style="font-size:11px;color:var(--text3)">10 ans</div><div style="font-size:16px;font-weight:500;font-family:var(--mono);color:var(--purple)" id="tr-10">—</div></div>
+      <div style="text-align:center;padding:10px;background:var(--surface2);border-radius:var(--radius)"><div style="font-size:11px;color:var(--text3)">20 ans</div><div style="font-size:16px;font-weight:500;font-family:var(--mono);color:var(--purple)" id="tr-20">—</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- BOURSE -->
+<div id="sec-bourse" class="sec">
+  <div class="page-header">
+    <div class="page-title">Bourse & Marchés</div>
+    <div class="page-sub">Analyse et conseils d'investissement personnalisés</div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <div class="card-title">Profil d'investissement</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Capital initial (€)</label>
+          <input type="number" id="bourse-montant" placeholder="Ex : 5 000" min="0" step="100" oninput="calcBourseProfil()">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Versement mensuel (€)</label>
+          <input type="number" id="bourse-mensuel" placeholder="Ex : 200" min="0" step="50" oninput="calcBourseProfil()">
+        </div>
+      </div>
+      <div class="sl-row"><label>Durée d'investissement</label><input type="range" min="1" max="30" step="1" value="10" id="sl-bourse-duree" oninput="calcBourseProfil()"><span id="sl-bourse-duree-out">10 ans</span></div>
+      <div class="sl-row"><label>Tolérance au risque</label><input type="range" min="1" max="5" step="1" value="3" id="sl-bourse-risque" oninput="calcBourseProfil()"><span id="sl-bourse-risque-out">Modéré</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Résumé du profil</div>
+      <div class="mg" style="margin-bottom:0">
+        <div class="metric"><div class="metric-label">Profil</div><div class="metric-value p" id="bourse-profil-label">Modéré</div></div>
+        <div class="metric"><div class="metric-label">Horizon</div><div class="metric-value b" id="bourse-horizon">10 ans</div></div>
+        <div class="metric"><div class="metric-label">Capital projeté</div><div class="metric-value g" id="bourse-capital">— €</div></div>
+        <div class="metric"><div class="metric-label">Rendement cible</div><div class="metric-value a" id="bourse-rendement">6,0 %/an</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Allocation suggérée</div>
+    <div class="alloc-bar" id="bourse-alloc-bar" style="height:12px;border-radius:6px">
+      <div class="alloc-seg" style="background:#1a4a7a;width:50%"></div>
+      <div class="alloc-seg" style="background:#4a3080;width:20%"></div>
+      <div class="alloc-seg" style="background:#1a6b4a;width:20%"></div>
+      <div class="alloc-seg" style="background:#7a4f0d;width:3%"></div>
+      <div class="alloc-seg" style="background:#8b2020;width:7%"></div>
+    </div>
+    <div class="legend-row" style="margin-top:8px" id="bourse-alloc-legend"></div>
+    <div id="bourse-alloc-grid" style="margin-top:4px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Produits recommandés</div>
+    <div id="bourse-produits"><div style="color:var(--text3);font-size:13px;padding:.5rem 0;text-align:center">Renseignez votre profil pour voir les recommandations.</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Analyse multi-agents <span class="badge badge-b" style="margin-left:6px">comité IA</span></div>
+    <div style="font-size:12.5px;color:var(--text3);margin-bottom:10px">
+      Un comité d'agents IA spécialisés (analystes, débat optimiste/pessimiste, gestion du risque) délibère sur un actif
+      et rend une décision adaptée à votre profil. Inspiré du framework TradingAgents.
+    </div>
+    <div class="agent-controls">
+      <input type="text" id="agent-ticker" placeholder="Ticker ou actif — ex : MC.PA, CW8, ASML, BTC" onkeydown="if(event.key==='Enter')runAgentAnalysis()">
+      <select id="agent-depth">
+        <option value="rapide">Rapide (~6 agents)</option>
+        <option value="standard" selected>Standard (~8 agents)</option>
+        <option value="approfondi">Approfondi (~12 agents)</option>
+      </select>
+      <button class="btn btn-primary" id="agent-run-btn" onclick="runAgentAnalysis()">Lancer l'analyse</button>
+    </div>
+    <div style="font-size:11.5px;color:var(--text3);margin:6px 0 10px">
+      ⚠ Ceci n'est pas un conseil en investissement. Avec le fournisseur Claude, les agents s'appuient sur la recherche web ;
+      sinon, sur les connaissances du modèle (potentiellement datées). Chaque analyse effectue plusieurs appels API.
+    </div>
+    <div id="agent-pipeline"></div>
+  </div>
+
+  <div class="quick-chips" style="margin-bottom:10px">
+    <button class="chip" onclick="askBourseAI('Explique-moi pourquoi cette allocation est adaptée à mon profil.')">Mon allocation</button>
+    <button class="chip" onclick="askBourseAI('Quels ETF World recommandes-tu pour un investisseur long terme ?')">ETF World</button>
+    <button class="chip" onclick="askBourseAI('Vaut-il mieux investir en une fois ou en DCA (versements réguliers) ?')">DCA vs lump sum</button>
+    <button class="chip" onclick="askBourseAI('Quelle part de crypto est raisonnable et quels risques dois-je connaître ?')">Crypto</button>
+    <button class="chip" onclick="askBourseAI('Quelles actions françaises ou européennes de qualité recommandes-tu pour du long terme ?')">Actions Europe</button>
+    <button class="chip" onclick="askBourseAI('Comment choisir entre PEA, assurance-vie et compte-titres ordinaire ?')">PEA / AV / CTO</button>
+    <button class="chip" onclick="askBourseAI('Comment me couvrir contre l\'inflation avec des matières premières ?')">Matières premières</button>
+    <button class="chip" onclick="askBourseAI('Quelles obligations ou fonds euros choisir pour sécuriser une partie de mon portefeuille ?')">Obligations</button>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="padding:1.1rem 1.25rem .75rem;display:flex;justify-content:space-between;align-items:center">
+      <div class="card-title" style="margin-bottom:0">Assistant investissement IA</div>
+      <button class="btn btn-sm" onclick="go('settings',document.querySelector('[onclick*=settings]'))">Configurer l'IA</button>
+    </div>
+    <div class="chat-container" style="border:none;border-top:1px solid var(--border);border-radius:0">
+      <div class="chat-messages" id="bourse-chat-msgs">
+        <div class="chat-msg ai">Bonjour ! Je suis votre assistant bourse. Renseignez votre montant et durée d'investissement, puis demandez-moi conseil sur les ETF, actions, obligations, crypto ou matières premières.</div>
+      </div>
+      <div class="chat-input-row">
+        <textarea id="bourse-chat-input" placeholder="Ex : Comment investir 10 000 € sur 15 ans ?" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendBourseChat()}"></textarea>
+        <button class="btn btn-primary" onclick="sendBourseChat()">Envoyer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ABONNEMENTS -->
+<div id="sec-abonnements" class="sec">
+  <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <div class="page-title">Crédits et Abonnements</div>
+      <div class="page-sub">Mensualités de crédit et prélèvements récurrents</div>
+    </div>
+    <button class="btn" onclick="showDetectAbo()" style="margin-top:4px;flex-shrink:0">Détecter automatiquement</button>
+  </div>
+
+  <div class="mg">
+    <div class="metric"><div class="metric-label">Crédits / mois</div><div class="metric-value r" id="abo-credit-m">— €</div></div>
+    <div class="metric"><div class="metric-label">Abonnements / mois</div><div class="metric-value r" id="abo-sub-m">— €</div></div>
+    <div class="metric"><div class="metric-label">Total mensuel</div><div class="metric-value r" id="abo-total-m">— €</div></div>
+    <div class="metric"><div class="metric-label">Coût annuel</div><div class="metric-value r" id="abo-total-y">— €</div></div>
+  </div>
+
+  <div id="abo-list"></div>
+
+  <div id="abo-detect-panel"></div>
+
+  <div class="card">
+    <div class="card-title">Ajouter un prélèvement récurrent</div>
+    <div class="form-grid">
+      <div class="form-group"><label class="form-label">Nom</label><input type="text" id="abo-name" placeholder="Crédit immo, Netflix..."></div>
+      <div class="form-group"><label class="form-label">Mensualité (€/mois)</label><input type="number" id="abo-price" placeholder="850.00" step="0.01"></div>
+      <div class="form-group"><label class="form-label">Catégorie</label>
+        <select id="abo-cat">
+          <optgroup label="Crédits">
+            <option value="immo">Crédit immobilier</option>
+            <option value="auto">Crédit auto</option>
+            <option value="conso">Crédit conso / perso</option>
+            <option value="travaux">Crédit travaux</option>
+          </optgroup>
+          <optgroup label="Abonnements">
+            <option value="streaming">Streaming</option>
+            <option value="telephonie">Téléphonie</option>
+            <option value="assurance">Assurance</option>
+            <option value="banque">Banque</option>
+            <option value="logiciel">Logiciel / IA</option>
+            <option value="autre">Autre</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Compte</label>
+        <select id="abo-account">
+          <option value="">— Compte —</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="addAbo()">Ajouter</button>
+  </div>
+</div>
+
+<!-- IMPORT -->
+<div id="sec-import" class="sec">
+  <div class="page-header">
+    <div class="page-title">Importer des documents</div>
+    <div class="page-sub">Relevés bancaires PDF ou CSV — analysés automatiquement par IA</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Importer un relevé ou document fiscal</div>
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+      <input type="file" id="file-input" accept=".pdf,.csv,.xlsx,.png,.jpg" multiple style="display:none" onchange="handleFiles(this.files)">
+      <div class="drop-zone-icon">↑</div>
+      <div class="drop-zone-title">Glisser-déposer ou cliquer pour importer</div>
+      <div class="drop-zone-sub">PDF relevés bancaires, avis d'imposition, CSV — Max 10 Mo par fichier</div>
+    </div>
+    <div class="file-list" id="file-list"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Analyse IA du document</div>
+    <div id="import-result">
+      <div style="font-size:13px;color:var(--text3);text-align:center;padding:1.5rem">Importez un document pour l'analyser automatiquement. L'IA extraira les transactions, revenus et informations fiscales.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Historique des imports</div>
+    <div id="import-history">
+      <div style="font-size:13px;color:var(--text3);padding:1rem 0;text-align:center">Aucun import enregistré.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Données de l'application</div>
+    <div class="btn-group">
+      <button class="btn" onclick="exportAppData()">Exporter JSON</button>
+      <button class="btn" onclick="document.getElementById('backup-input').click()">Restaurer JSON</button>
+      <button class="btn btn-danger" onclick="resetAppData()">Réinitialiser</button>
+      <input type="file" id="backup-input" accept="application/json,.json" style="display:none" onchange="importAppData(this)">
+    </div>
+  </div>
+</div>
+
+<!-- CONSEILLER IA -->
+<div id="sec-conseiller" class="sec">
+  <div class="page-header">
+    <div class="page-title">Conseiller IA</div>
+    <div class="page-sub">Analyse de vos données financières personnelles</div>
+  </div>
+
+  <div class="notif info" style="margin-bottom:1rem;font-size:13px">
+    Configurez votre fournisseur IA et votre clé API dans <button class="btn btn-sm" onclick="go('settings',document.querySelector('[onclick*=settings]'))">Paramètres</button> pour activer le conseiller.
+  </div>
+
+  <div class="quick-chips">
+    <button class="chip" onclick="askAI('Quelle est ma capacité d\'épargne mensuelle nette réaliste ?')">Capacité épargne ?</button>
+    <button class="chip" onclick="askAI('Comment répartir mon épargne entre livrets et investissements ?')">Stratégie épargne</button>
+    <button class="chip" onclick="askAI('Quels abonnements résilier en priorité ?')">Abonnements à couper</button>
+    <button class="chip" onclick="askAI('Comment optimiser ma fiscalité ?')">Optimisation fiscale</button>
+    <button class="chip" onclick="askAI('Est-ce que je dépense trop en alimentation ?')">Alimentation</button>
+    <button class="chip" onclick="askAI('Dans 10 ans, quel sera mon patrimoine si j\'épargne régulièrement ?')">Patrimoine dans 10 ans</button>
+  </div>
+
+  <div class="chat-container">
+    <div class="chat-messages" id="chat-msgs">
+      <div class="chat-msg ai">Bonjour ! Je suis votre conseiller financier IA. Configurez votre clé API dans Paramètres, puis posez-moi vos questions sur le budget, l'épargne ou les investissements.</div>
+    </div>
+    <div class="chat-input-row">
+      <textarea id="chat-input" placeholder="Posez votre question..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}"></textarea>
+      <button class="btn btn-primary" onclick="sendChat()">Envoyer</button>
+    </div>
+  </div>
+</div>
+
+<!-- PARAMÈTRES -->
+<div id="sec-settings" class="sec">
+  <div class="page-header">
+    <div class="page-title">Paramètres</div>
+    <div class="page-sub">Mes comptes, conseiller IA et préférences</div>
+  </div>
+
+  <!-- Profil -->
+  <div class="card">
+    <div class="card-title">Profil</div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Prénom affiché dans l'app</label>
+      <input type="text" id="set-display-name" placeholder="Ex: Marie, Jean-Pierre..." autocomplete="given-name" style="max-width:280px">
+    </div>
+    <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
+  </div>
+
+  <!-- Comptes -->
+  <div class="card">
+    <div class="card-title">Mes comptes bancaires</div>
+    <div id="settings-accounts-list" style="margin-bottom:1rem">
+      <div style="color:var(--text3);font-size:13px;padding:8px 0">Aucun compte ajouté.</div>
+    </div>
+    <div style="height:1px;background:var(--border);margin:12px 0"></div>
+    <div class="card-title" style="margin-bottom:10px">Ajouter un compte</div>
+    <div class="form-grid three">
+      <div class="form-group">
+        <label class="form-label">Nom du compte</label>
+        <input type="text" id="acc-name" placeholder="Ex: Compte courant, Livret A...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Banque</label>
+        <input type="text" id="acc-bank" placeholder="Ex: BNP, CdE, Bourso...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select id="acc-type">
+          <option value="courant">Compte courant</option>
+          <option value="epargne">Livret / Épargne</option>
+          <option value="joint">Compte joint</option>
+          <option value="pro">Compte professionnel</option>
+          <option value="invest">Investissement</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-grid three">
+      <div class="form-group">
+        <label class="form-label">Solde actuel (€)</label>
+        <input type="number" id="acc-balance" placeholder="0.00" step="0.01" value="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">N° compte (4 derniers chiffres)</label>
+        <input type="text" id="acc-number" placeholder="Ex: 1234" maxlength="10">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="addAccount()">Ajouter le compte</button>
+  </div>
+
+  <!-- IA -->
+  <div class="card">
+    <div class="card-title">Conseiller IA</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Fournisseur IA</label>
+        <select id="set-provider">
+          <option value="openai">OpenAI (GPT-4o)</option>
+          <option value="claude">Claude (Anthropic)</option>
+          <option value="gemini">Gemini (Google)</option>
+          <option value="lechat">Le Chat (Mistral)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Clé API</label>
+        <input type="password" id="set-api-key" placeholder="Votre clé API..." style="font-family:var(--mono)">
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">
+      Votre clé est stockée uniquement en local sur cet appareil. Elle n'est jamais partagée.
+    </div>
+    <button class="btn btn-primary" onclick="saveSettings()">Enregistrer les paramètres</button>
+  </div>
+
+  <!-- Sécurité -->
+  <div class="card">
+    <div class="card-title">Sécurité</div>
+    <button class="btn" onclick="changePin()">Changer le code PIN</button>
+  </div>
+
+  <!-- Danger zone -->
+  <div class="card">
+    <div class="card-title">Données</div>
+    <div class="btn-group">
+      <button class="btn" onclick="exportAppData()">Exporter JSON</button>
+      <button class="btn btn-danger" onclick="resetAppData()">Réinitialiser toutes les données</button>
+    </div>
+  </div>
+</div>
+
+</main>
+</div>
+
+</body>
+</html>
