@@ -475,9 +475,17 @@
     <div id="bourse-alloc-grid" style="margin-top:4px"></div>
   </div>
 
-  <div class="card">
-    <div class="card-title">Produits recommandés</div>
-    <div id="bourse-produits"><div style="color:var(--text3);font-size:13px;padding:.5rem 0;text-align:center">Renseignez votre profil pour voir les recommandations.</div></div>
+  <div class="card" style="padding-bottom:0">
+    <div class="tabs" style="margin:0 -1.25rem;padding:0 1.25rem">
+      <button class="tab on" id="btab-recomm" onclick="switchBourseTab('recomm',this)">Produits recommandés</button>
+      <button class="tab" id="btab-placements" onclick="switchBourseTab('placements',this)">Mes placements</button>
+    </div>
+    <div id="bourse-tab-recomm" style="padding-top:12px;padding-bottom:1.25rem">
+      <div id="bourse-produits"><div style="color:var(--text3);font-size:13px;padding:.5rem 0;text-align:center">Renseignez votre profil pour voir les recommandations.</div></div>
+    </div>
+    <div id="bourse-tab-placements" style="display:none;padding-top:12px;padding-bottom:1.25rem">
+      <div id="bourse-mes-placements"></div>
+    </div>
   </div>
 
   <div class="card">

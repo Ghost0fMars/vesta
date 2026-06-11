@@ -85,7 +85,7 @@ function go(id, el) {
   if (id === 'dashboard')    renderDashAbo();
   if (id === 'settings')     { renderSettingsAccounts(); loadSettingsUI(); }
   if (id === 'epargne') { calcEpargne(); setTimeout(initTRChart, 100); }
-  if (id === 'bourse') { calcBourseProfil(); if (typeof restoreAgentAnalysis === 'function') restoreAgentAnalysis(); }
+  if (id === 'bourse') { calcBourseProfil(); if (typeof restoreAgentAnalysis === 'function') restoreAgentAnalysis(); if (document.getElementById('bourse-tab-placements')?.style.display !== 'none') renderBoursePlacements(); }
 }
 
 function goToAccountTransactions(accountId) {
@@ -834,6 +834,94 @@ async function importCreditImmo(input) {
   }
 }
 
+function parsePlacementsCSV(content) {
+  content = content.replace(/^﻿/, '');
+  const lines = content.trim().split(/\r?\n/).map(l => l.trim()).filter(l => l);
+  if (lines.length < 2) return null;
+
+  const sep = lines.slice(0, 8).join('').split(';').length > lines.slice(0, 8).join('').split(',').length ? ';' : ',';
+  const toNum = s => parseFloat((s || '').replace(/[\s ]/g, '').replace(',', '.').replace(/[€%*]/g, '')) || 0;
+
+  // Find the header row — must contain at least 2 holding-related keywords
+  const KEYWORDS = ['quantit', 'valoris', 'cours', 'prix', 'isin', 'parts', 'nombre', 'valeur liquid', 'ticker', 'instrument'];
+  let headerIdx = -1, headers = [];
+  for (let i = 0; i < Math.min(20, lines.length); i++) {
+    const row = lines[i].split(sep).map(c => c.replace(/^"|"$/g, '').trim().toLowerCase());
+    const hits = KEYWORDS.filter(k => row.some(h => h.includes(k))).length;
+    if (hits >= 2) { headers = row; headerIdx = i; break; }
+  }
+  if (headerIdx < 0) return null;
+
+  const colIdx = (...names) => {
+    for (const n of names) {
+      const i = headers.findIndex(h => h.includes(n));
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
+  const colVal = (row, ...names) => {
+    const i = colIdx(...names);
+    return i >= 0 && row[i] ? row[i].replace(/^"|"$/g, '').trim() : '';
+  };
+
+  // Extract account metadata from lines before the header
+  let accountName = '', bank = '', totalBalance = 0;
+  for (let i = 0; i < headerIdx; i++) {
+    const raw = lines[i].replace(/^"|"$/g, '').trim();
+    const l = raw.toLowerCase();
+    if (/\b(pea|compte.titres|cto|assurance.vie|livret|pel|cel|per\b)/.test(l) && !accountName) {
+      accountName = raw.split(sep)[0].replace(/^"|"$/g, '').trim().slice(0, 60);
+    }
+    if (/\b(bourso|fortuneo|yomoni|trade republic|binck|degiro|saxo|linxea|swisslife|spirica|generali)/.test(l) && !bank) {
+      bank = raw.split(sep)[0].replace(/^"|"$/g, '').trim().slice(0, 40);
+    }
+    const nums = raw.match(/([\d\s]{1,9}[,.][\d]{2})/g);
+    if (nums) nums.forEach(n => { const v = toNum(n); if (v > totalBalance) totalBalance = v; });
+  }
+
+  const iName  = colIdx('libel', 'instru', 'titre', 'fonds', 'fond', 'name', 'descri', 'désign', 'design', 'nom');
+  const iTicker = colIdx('isin', 'ticker', 'code isin', 'code val', 'code');
+  const iQty   = colIdx('quantit', 'parts', 'nombre de part', 'qté', 'qty', 'quantity', 'piè', 'piece');
+  const iPrice = colIdx('cours', 'prix par', 'valeur liquid', 'vl ', 'nav', 'price', 'cotation');
+  const iValue = colIdx('valoris', 'valeur estimée', 'valeur totale', 'montant', 'total', 'value', 'valeur actuel', 'valeur (');
+
+  if (iName < 0 && iValue < 0) return null;
+
+  const holdings = [];
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const row = lines[i].split(sep);
+    if (row.length < 2) continue;
+    const name = iName >= 0 ? (row[iName] || '').replace(/^"|"$/g, '').trim() : '';
+    if (!name) continue;
+    const nameLower = name.toLowerCase();
+    // Skip section headers and total rows — collect balance from total rows
+    if (/^total|sous.total|^valorisation totale/.test(nameLower)) {
+      const v = toNum(colVal(row, 'valoris', 'montant', 'total', 'value'));
+      if (v > totalBalance) totalBalance = v;
+      continue;
+    }
+    if (/^(libel|instru|titre|fonds|code|quantit|valoris|cours)/.test(nameLower)) continue;
+
+    const ticker   = iTicker >= 0 ? (row[iTicker] || '').replace(/^"|"$/g, '').trim() : '';
+    const quantity = iQty    >= 0 ? toNum(row[iQty])   : 0;
+    const price    = iPrice  >= 0 ? toNum(row[iPrice]) : 0;
+    const value    = iValue  >= 0 ? toNum(row[iValue]) : (quantity && price ? Math.round(quantity * price * 100) / 100 : 0);
+
+    if (!value && !quantity) continue;
+    holdings.push({ name, ticker, quantity, price, value });
+  }
+
+  if (!holdings.length) return null;
+  if (!totalBalance) totalBalance = Math.round(holdings.reduce((s, h) => s + h.value, 0) * 100) / 100;
+
+  return {
+    accountName: accountName || 'Portefeuille',
+    bank: bank || '',
+    balance: totalBalance,
+    holdings
+  };
+}
+
 async function importPlacements(input) {
   const file = input.files[0];
   if (!file) return;
@@ -842,7 +930,7 @@ async function importPlacements(input) {
   const show = (ok, msg) => {
     if (!notif) return;
     notif.style.display = 'block';
-    notif.innerHTML = `<div class="notif${ok?' success':''}" style="${ok?'':'background:var(--red-bg);color:var(--red)'};margin-top:8px">${msg}</div>`;
+    notif.innerHTML = `<div class="notif${ok?' success':''}" style="${ok?'background:transparent':'background:var(--red-bg);color:var(--red)'};margin-top:8px">${msg}</div>`;
     if (ok) setTimeout(() => { notif.style.display = 'none'; }, 7000);
   };
 
@@ -898,10 +986,19 @@ async function importPlacements(input) {
       textContent = await file.text();
     }
 
+    // ── Parseur local CSV/texte — aucune clé API requise ──
+    if (!isPDF && textContent) {
+      const localParsed = parsePlacementsCSV(textContent);
+      if (localParsed) { applyParsed(localParsed); return; }
+    }
+
     const key      = settings.aiApiKey || '';
     const provider = settings.aiProvider || 'openai';
     if (!key) {
-      show(false, `Renseignez une clé API dans Paramètres pour analyser ce fichier automatiquement.`);
+      show(false, isPDF
+        ? `Impossible d'analyser ce PDF sans clé API. Configurez-la dans <button class="btn btn-sm" onclick="go('settings',document.querySelector('[onclick*=settings]'))">Paramètres</button>, ou exportez votre relevé en CSV depuis votre courtier.`
+        : `Format CSV non reconnu automatiquement. Configurez une clé API dans <button class="btn btn-sm" onclick="go('settings',document.querySelector('[onclick*=settings]'))">Paramètres</button> pour l'analyse IA, ou vérifiez que le fichier provient d'un courtier standard (BoursoBank, Fortuneo, Trade Republic…).`
+      );
       return;
     }
 
@@ -1995,6 +2092,83 @@ const BOURSE_RISK_BADGE = {
   'Nul':'badge-g', 'Très faible':'badge-g', 'Faible':'badge-g',
   'Moyen':'badge-b', 'Élevé':'badge-a', 'Très élevé':'badge-r'
 };
+
+function switchBourseTab(tab, el) {
+  ['recomm','placements'].forEach(t => {
+    document.getElementById('bourse-tab-'+t).style.display = t === tab ? 'block' : 'none';
+    document.getElementById('btab-'+t).classList.toggle('on', t === tab);
+  });
+  if (tab === 'placements') renderBoursePlacements();
+}
+
+function renderBoursePlacements() {
+  const el = document.getElementById('bourse-mes-placements');
+  if (!el) return;
+
+  const finAccounts = accounts.filter(a => ['epargne','invest'].includes(a.type));
+  if (!finAccounts.length) {
+    el.innerHTML = `<div style="color:var(--text3);font-size:13px;padding:1rem 0;text-align:center">
+      Aucun placement enregistré. Ajoutez des comptes épargne/investissement dans
+      <button class="btn btn-sm" onclick="go('settings',document.querySelector('[onclick*=settings]'))">Paramètres</button>
+      ou importez un relevé depuis
+      <button class="btn btn-sm" onclick="go('patrimoine',document.querySelector('[onclick*=patrimoine]'))">Patrimoine</button>.
+    </div>`;
+    return;
+  }
+
+  const totalVal = finAccounts.reduce((s,a) => s + (a.balance||0), 0);
+
+  let html = `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px">
+    <span style="font-size:12px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.06em">Valeur totale</span>
+    <span style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--green)">${fmtE(totalVal)}</span>
+  </div>`;
+
+  finAccounts.forEach(a => {
+    const typeLabel = a.type === 'invest' ? 'Portefeuille' : 'Livret / Épargne';
+    const pct = totalVal > 0 ? (a.balance / totalVal * 100).toFixed(1) : '0.0';
+
+    html += `<div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+        <div>
+          <span style="font-weight:500;font-size:13.5px">${a.name}</span>
+          <span style="font-size:10px;color:var(--text3);margin-left:6px">${a.bank||''} · ${typeLabel}</span>
+        </div>
+        <div style="text-align:right">
+          <span style="font-family:var(--mono);font-weight:600;font-size:14px;color:var(--green)">${fmtE(a.balance||0)}</span>
+          <span style="font-size:10px;color:var(--text3);margin-left:6px">${pct} %</span>
+        </div>
+      </div>`;
+
+    // Barre de proportion
+    html += `<div style="background:var(--border);border-radius:3px;height:3px;overflow:hidden;margin-bottom:8px">
+      <div style="height:100%;background:var(--green);width:${pct}%;border-radius:3px"></div>
+    </div>`;
+
+    // Holdings
+    if (a.holdings && a.holdings.length > 0) {
+      const holdTotal = a.holdings.reduce((s,h) => s+(h.value||0), 0);
+      html += `<div style="display:flex;flex-direction:column;gap:5px;padding-left:10px;border-left:2px solid var(--border2)">`;
+      a.holdings.forEach(h => {
+        const hPct = holdTotal > 0 ? (h.value / holdTotal * 100).toFixed(1) : '0.0';
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
+          <span style="color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px">
+            ${h.name}${h.ticker ? ` <span style="font-family:var(--mono);color:var(--text3);font-size:10px">${h.ticker}</span>` : ''}
+            ${h.quantity ? `<br><span style="color:var(--text3);font-size:10.5px">${h.quantity} part${h.quantity > 1 ? 's' : ''} · ${fmtE(h.price||0)}</span>` : ''}
+          </span>
+          <span style="font-family:var(--mono);font-size:12px;white-space:nowrap;color:var(--text)">${fmtE(h.value||0)}</span>
+          <span style="font-size:10px;color:var(--text3);margin-left:6px;min-width:38px;text-align:right">${hPct} %</span>
+        </div>`;
+      });
+      html += `</div>`;
+    } else {
+      html += `<div style="font-size:11.5px;color:var(--text3);padding-left:10px">Aucun détail de position — <button class="btn btn-sm" onclick="go('patrimoine',document.querySelector('[onclick*=patrimoine]'))" style="font-size:10px">Importer relevé</button></div>`;
+    }
+
+    html += `</div>`;
+  });
+
+  el.innerHTML = html;
+}
 
 function getBourseContext() {
   const montant = +document.getElementById('bourse-montant')?.value || 0;
