@@ -344,7 +344,14 @@
 
   <div class="two">
     <div class="card">
-      <div class="card-title">Placements financiers</div>
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        Placements financiers
+        <span>
+          <input type="file" id="pat-placements-input" accept=".csv,.txt,.pdf,application/pdf" style="display:none" onchange="importPlacements(this)">
+          <button class="btn btn-sm" onclick="document.getElementById('pat-placements-input').click()">Importer relevé</button>
+        </span>
+      </div>
+      <div id="pat-placements-notif" style="display:none"></div>
       <div id="pat-placements-list">
         <div style="color:var(--text3);font-size:13px;padding:1rem 0;text-align:center">Ajoutez des comptes épargne et investissement dans <button class="btn btn-sm" onclick="go('settings',document.querySelector('[onclick*=settings]'))">Paramètres</button></div>
       </div>

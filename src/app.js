@@ -834,6 +834,119 @@ async function importCreditImmo(input) {
   }
 }
 
+async function importPlacements(input) {
+  const file = input.files[0];
+  if (!file) return;
+  input.value = '';
+  const notif = document.getElementById('pat-placements-notif');
+  const show = (ok, msg) => {
+    if (!notif) return;
+    notif.style.display = 'block';
+    notif.innerHTML = `<div class="notif${ok?' success':''}" style="${ok?'':'background:var(--red-bg);color:var(--red)'};margin-top:8px">${msg}</div>`;
+    if (ok) setTimeout(() => { notif.style.display = 'none'; }, 7000);
+  };
+
+  const applyParsed = parsed => {
+    const name = parsed.accountName || 'Compte Titres';
+    const bank = parsed.bank || 'Courtier';
+    const balance = parseFloat(parsed.balance) || 0;
+    const holdings = Array.isArray(parsed.holdings) ? parsed.holdings.map(h => ({
+      name: h.name || 'Titre',
+      ticker: h.ticker || '',
+      quantity: parseFloat(h.quantity) || 0,
+      price: parseFloat(h.price) || 0,
+      value: parseFloat(h.value) || 0
+    })) : [];
+
+    let account = accounts.find(a => 
+      ['epargne', 'invest'].includes(a.type) && 
+      (a.name.toLowerCase() === name.toLowerCase() || (a.bank && a.bank.toLowerCase() === bank.toLowerCase() && a.name.toLowerCase().includes(name.toLowerCase())))
+    );
+
+    if (account) {
+      account.balance = balance;
+      account.holdings = holdings;
+      show(true, `✓ Compte "${account.name}" mis à jour avec ${holdings.length} ligne(s) de titres. Solde : <strong>${fmtE(balance)}</strong>`);
+    } else {
+      const newAcc = {
+        id: 'acc_' + Date.now(),
+        name: name,
+        bank: bank,
+        type: 'invest',
+        balance: balance,
+        accountNumber: '',
+        holdings: holdings
+      };
+      accounts.push(newAcc);
+      show(true, `✓ Nouveau compte d'investissement "${name}" créé avec ${holdings.length} ligne(s) de titres. Solde : <strong>${fmtE(balance)}</strong>`);
+    }
+
+    saveState(); 
+    renderPatrimoine();
+    updateAccountDropdowns();
+    renderAccounts();
+    renderSettingsAccounts();
+  };
+
+  const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+
+  try {
+    let textContent = '';
+    if (isPDF) {
+      try { textContent = await extractPDFText(file); } catch(e) { /* PDF.js exception */ }
+    } else {
+      textContent = await file.text();
+    }
+
+    const key      = settings.aiApiKey || '';
+    const provider = settings.aiProvider || 'openai';
+    if (!key) {
+      show(false, `Renseignez une clé API dans Paramètres pour analyser ce fichier automatiquement.`);
+      return;
+    }
+
+    show(false, `<span style="color:var(--text2)">Analyse IA en cours…</span>`);
+
+    const PROMPT = `Tu es un extracteur de données financières expert en bourse et placements. Analyse ce relevé de compte-titres, PEA, assurance-vie ou portefeuille d'investissement et extrais les données. Réponds UNIQUEMENT en JSON valide sans markdown :
+{
+  "accountName": "Nom du compte (ex: PEA, Compte-Titres, Assurance-Vie...)",
+  "bank": "Nom de la banque ou courtier (ex: BoursoBank, Fortuneo, Yomoni...)",
+  "balance": 0.0,
+  "holdings": [
+    {
+      "name": "Nom de la ligne / valeur / fonds / action (ex: Amundi MSCI World)",
+      "ticker": "Ticker ou ISIN si disponible (ex: CW8 ou FR0010315770)",
+      "quantity": 1.0,
+      "price": 0.0,
+      "value": 0.0
+    }
+  ]
+}`;
+
+    let aiText = '';
+    if (isPDF && provider === 'claude') {
+      const readAsDataURL = f => new Promise((res,rej) => { const r=new FileReader(); r.onload=e=>res(e.target.result); r.onerror=rej; r.readAsDataURL(f); });
+      const b64  = (await readAsDataURL(file)).split(',')[1];
+      const msgs = [{role:'user', content:[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b64}},{type:'text',text:PROMPT}]}];
+      aiText = await callAIForImport(provider, key, msgs);
+    } else {
+      const body = textContent || `Fichier : ${file.name} (${(file.size/1024).toFixed(0)} Ko) — impossible d'extraire le texte.`;
+      aiText = await callAIForImport(provider, key, [{role:'user', content:`${PROMPT}\n\nContenu :\n${body.slice(0, 20000)}`}]);
+    }
+
+    let parsed = null;
+    try { parsed = JSON.parse(aiText.replace(/```json|```/g,'').trim()); } catch(e) {}
+    if (parsed && (parsed.accountName || parsed.holdings)) {
+      applyParsed(parsed);
+    } else {
+      show(false, `L'IA n'a pas pu extraire les données du fichier. Vérifiez qu'il s'agit bien d'un relevé de titres.`);
+    }
+  } catch(e) {
+    show(false, `Erreur : ${e.message}`);
+  }
+}
+
+
 function deleteCreditImmo(id) {
   if (!confirm('Supprimer ce crédit ?')) return;
   creditsImmo = creditsImmo.filter(c => c.id !== id);
@@ -874,7 +987,37 @@ function renderPatrimoine() {
   if (plaEl) {
     const finAccounts = accounts.filter(a => ['epargne','invest'].includes(a.type));
     plaEl.innerHTML = finAccounts.length
-      ? finAccounts.map(a => `<div class="row"><span class="row-label">${a.name}<br><span style="font-size:10px;color:var(--text3)">${a.bank||''}</span></span><span class="row-value rv-g">${fmtE(a.balance||0)}</span></div>`).join('')
+      ? finAccounts.map(a => {
+          let holdingsHtml = '';
+          if (a.holdings && a.holdings.length > 0) {
+            holdingsHtml = `
+              <div class="account-holdings" style="margin-top: 8px; margin-bottom: 4px; padding-left: 12px; border-left: 2px solid var(--border2); font-size: 11.5px; display: flex; flex-direction: column; gap: 6px;">
+                ${a.holdings.map(h => `
+                  <div style="display:flex; justify-content:space-between; align-items:center; color:var(--text2)">
+                    <span style="font-weight: 400; line-height: 1.3;">
+                      ${h.name}
+                      ${h.ticker ? `<span style="font-family:var(--mono); color:var(--text3); font-size:10px; margin-left: 4px;">(${h.ticker})</span>` : ''}
+                      ${h.quantity ? `<br><span style="color:var(--text3); font-size:10.5px;">${h.quantity} part${h.quantity > 1 ? 's' : ''} · ${fmtE(h.price || 0)}</span>` : ''}
+                    </span>
+                    <span style="font-family:var(--mono); font-weight:500; color:var(--text);">${fmtE(h.value || 0)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          }
+          return `
+            <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
+              <div class="row" style="margin: 0; padding: 0; border: none; align-items: center; justify-content: space-between;">
+                <span class="row-label" style="font-weight: 500; font-size: 13.5px; color: var(--text);">
+                  ${a.name}
+                  <br><span style="font-size:10px;color:var(--text3)">${a.bank||''} · ${a.type === 'invest' ? 'Portefeuille' : 'Livret'}</span>
+                </span>
+                <span class="row-value rv-g" style="font-family:var(--mono); font-weight: 600; font-size: 14px;">${fmtE(a.balance||0)}</span>
+              </div>
+              ${holdingsHtml}
+            </div>
+          `;
+        }).join('')
       : `<div style="color:var(--text3);font-size:13px;padding:1rem 0;text-align:center">Ajoutez des comptes épargne et investissement dans <button class="btn btn-sm" onclick="go('settings',document.querySelector('[onclick*=settings]'))">Paramètres</button></div>`;
   }
 
