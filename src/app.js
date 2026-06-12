@@ -43,31 +43,25 @@ let creditsImmo  = [];
 
 let importedFiles = [];
 
-const STORAGE_KEY = 'mes-finances-state-v3';
-
-function loadState() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
+function saveState() {
+  const user = window.fbAuth?.currentUser;
+  if (user) {
+    window.fbSaveState(user.uid, {
+      transactions, abonnements, accounts, settings, budget, creditsImmo,
+      savedAt: new Date().toISOString()
+    });
   }
 }
 
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    transactions, abonnements, accounts, settings, budget, creditsImmo,
-    savedAt: new Date().toISOString()
-  }));
+function applyState(savedState) {
+  if (!savedState) return;
+  if (savedState.transactions?.length) transactions = savedState.transactions;
+  if (savedState.abonnements?.length)  abonnements  = savedState.abonnements;
+  if (savedState.accounts?.length)     accounts     = savedState.accounts;
+  if (savedState.settings)             settings     = { ...settings, ...savedState.settings };
+  if (savedState.budget)               budget       = savedState.budget;
+  if (savedState.creditsImmo?.length)  creditsImmo  = savedState.creditsImmo;
 }
-
-const savedState = loadState();
-if (savedState?.transactions?.length) transactions = savedState.transactions;
-if (savedState?.abonnements?.length)  abonnements  = savedState.abonnements;
-if (savedState?.accounts?.length)     accounts     = savedState.accounts;
-if (savedState?.settings)             settings     = { ...settings, ...savedState.settings };
-if (savedState?.budget)               budget       = savedState.budget;
-if (savedState?.creditsImmo?.length)  creditsImmo  = savedState.creditsImmo;
 
 // ── NAVIGATION ──
 function go(id, el) {
@@ -1348,7 +1342,8 @@ function saveAccountEdit(id) {
 function updateDisplayName() {
   const nameEl = document.getElementById('user-display-name');
   if (!nameEl) return;
-  nameEl.textContent = settings.displayName || 'Profil';
+  const user = window.fbAuth?.currentUser;
+  nameEl.textContent = settings.displayName || user?.email?.split('@')[0] || 'Profil';
 }
 
 function saveSettings() {
@@ -2307,98 +2302,6 @@ function askBourseAI(q) {
   setTimeout(() => { document.getElementById('bourse-chat-input').value = q; sendBourseChat(); }, 150);
 }
 
-// ── PIN AUTH ──
-const PIN_KEY = 'vesta-pin-hash';
-let _pinBuffer = '';
-let _pinStep = 'unlock';
-let _pinFirst = '';
-
-async function hashPin(pin) {
-  const data = new TextEncoder().encode('vesta:' + pin);
-  const buf = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function updatePinDots() {
-  document.querySelectorAll('#pin-dots .pin-dot').forEach((d, i) => {
-    d.classList.toggle('filled', i < _pinBuffer.length);
-  });
-}
-
-function showPinErr(msg) {
-  const el = document.getElementById('pin-err');
-  if (el) el.textContent = msg;
-  const dots = document.getElementById('pin-dots');
-  dots.classList.remove('pin-shake');
-  void dots.offsetWidth;
-  dots.classList.add('pin-shake');
-}
-
-function clearPinErr() {
-  const el = document.getElementById('pin-err');
-  if (el) el.textContent = '';
-}
-
-function pinKey(val) {
-  if (val === 'del') {
-    _pinBuffer = _pinBuffer.slice(0, -1);
-    updatePinDots();
-    clearPinErr();
-    return;
-  }
-  if (_pinBuffer.length >= 4) return;
-  _pinBuffer += val;
-  updatePinDots();
-  if (_pinBuffer.length === 4) submitPin();
-}
-
-async function submitPin() {
-  const pin = _pinBuffer;
-  if (pin.length < 4) return;
-
-  if (_pinStep === 'unlock') {
-    const stored = localStorage.getItem(PIN_KEY);
-    const hash = await hashPin(pin);
-    if (hash === stored) {
-      document.getElementById('pin-screen').classList.add('hidden');
-    } else {
-      showPinErr('Code incorrect');
-      _pinBuffer = '';
-      updatePinDots();
-    }
-  } else if (_pinStep === 'setup-enter') {
-    _pinFirst = pin;
-    _pinBuffer = '';
-    _pinStep = 'setup-confirm';
-    document.getElementById('pin-subtitle').textContent = 'Confirmez votre code PIN';
-    updatePinDots();
-    clearPinErr();
-  } else if (_pinStep === 'setup-confirm') {
-    if (pin !== _pinFirst) {
-      showPinErr('Les codes ne correspondent pas');
-      _pinBuffer = '';
-      _pinStep = 'setup-enter';
-      _pinFirst = '';
-      document.getElementById('pin-subtitle').textContent = 'Créez votre code PIN';
-      updatePinDots();
-    } else {
-      const hash = await hashPin(pin);
-      localStorage.setItem(PIN_KEY, hash);
-      document.getElementById('pin-screen').classList.add('hidden');
-      showSyncBadge('Code PIN enregistré');
-    }
-  }
-}
-
-function changePin() {
-  _pinBuffer = '';
-  _pinFirst = '';
-  _pinStep = 'setup-enter';
-  clearPinErr();
-  updatePinDots();
-  document.getElementById('pin-subtitle').textContent = 'Créez votre nouveau code PIN';
-  document.getElementById('pin-screen').classList.remove('hidden');
-}
 
 // ── INIT ──
 function openApp() {
@@ -2438,23 +2341,15 @@ function showSyncBadge(msg) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  ['mes-finances-state-v2', 'fin-api-key'].forEach(k => localStorage.removeItem(k));
-  openApp();
-
-  const stored = localStorage.getItem(PIN_KEY);
-  if (stored) {
-    _pinStep = 'unlock';
-    document.getElementById('pin-subtitle').textContent = 'Entrez votre code PIN';
-  } else {
-    _pinStep = 'setup-enter';
-    document.getElementById('pin-subtitle').textContent = 'Créez votre code PIN';
-  }
-
-  document.addEventListener('keydown', e => {
-    if (document.getElementById('pin-screen').classList.contains('hidden')) return;
-    if (e.key >= '0' && e.key <= '9') pinKey(e.key);
-    else if (e.key === 'Backspace') pinKey('del');
-    else if (e.key === 'Enter') submitPin();
+  window.fbOnAuth(async (user) => {
+    if (user) {
+      const savedState = await window.fbLoadState(user.uid);
+      applyState(savedState);
+      document.getElementById('auth-screen').classList.add('hidden');
+      openApp();
+    } else {
+      document.getElementById('auth-screen').classList.remove('hidden');
+    }
   });
 
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {

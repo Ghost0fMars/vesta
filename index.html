@@ -14,13 +14,18 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="/src/firebase.js"></script>
 <link rel="stylesheet" href="/src/styles.css?v=accounts-1">
+<script src="/src/auth.js" defer></script>
 <script src="/src/app.js?v=accounts-1" defer></script>
 <script src="/src/agents.js?v=agents-1" defer></script>
 </head>
 <body>
 
-<div id="pin-screen">
+<div id="auth-screen">
   <div class="auth-card" style="text-align:center">
     <div style="margin-bottom:.5rem">
       <svg width="44" height="60" viewBox="-42 -68 84 114" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -31,28 +36,27 @@
       </svg>
     </div>
     <div class="auth-logo">VESTA</div>
-    <div class="auth-sub" id="pin-subtitle">Entrez votre code PIN</div>
-    <div class="pin-dots" id="pin-dots">
-      <span class="pin-dot"></span>
-      <span class="pin-dot"></span>
-      <span class="pin-dot"></span>
-      <span class="pin-dot"></span>
+    <div class="auth-sub">Gérez votre patrimoine en toute sécurité</div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="showAuthTab('login')">Connexion</button>
+      <button class="auth-tab" id="tab-register" onclick="showAuthTab('register')">Créer un compte</button>
     </div>
-    <div id="pin-err"></div>
-    <div class="pin-pad">
-      <button class="pin-key" onclick="pinKey('1')">1</button>
-      <button class="pin-key" onclick="pinKey('2')">2</button>
-      <button class="pin-key" onclick="pinKey('3')">3</button>
-      <button class="pin-key" onclick="pinKey('4')">4</button>
-      <button class="pin-key" onclick="pinKey('5')">5</button>
-      <button class="pin-key" onclick="pinKey('6')">6</button>
-      <button class="pin-key" onclick="pinKey('7')">7</button>
-      <button class="pin-key" onclick="pinKey('8')">8</button>
-      <button class="pin-key" onclick="pinKey('9')">9</button>
-      <button class="pin-key pin-key-del" onclick="pinKey('del')">⌫</button>
-      <button class="pin-key" onclick="pinKey('0')">0</button>
-      <button class="pin-key pin-key-ok" onclick="submitPin()">✓</button>
+    <div id="auth-login-form">
+      <div style="display:flex;flex-direction:column;gap:10px;text-align:left">
+        <input type="email" id="auth-email" placeholder="Email" autocomplete="email" style="width:100%;box-sizing:border-box">
+        <input type="password" id="auth-password" placeholder="Mot de passe" autocomplete="current-password" style="width:100%;box-sizing:border-box">
+        <button class="btn" id="btn-login" onclick="handleLogin()" style="width:100%">Se connecter</button>
+      </div>
     </div>
+    <div id="auth-register-form" style="display:none">
+      <div style="display:flex;flex-direction:column;gap:10px;text-align:left">
+        <input type="email" id="reg-email" placeholder="Email" autocomplete="email" style="width:100%;box-sizing:border-box">
+        <input type="password" id="reg-password" placeholder="Mot de passe" autocomplete="new-password" style="width:100%;box-sizing:border-box">
+        <input type="password" id="reg-password2" placeholder="Confirmer le mot de passe" autocomplete="new-password" style="width:100%;box-sizing:border-box">
+        <button class="btn" id="btn-register" onclick="handleRegister()" style="width:100%">Créer mon compte</button>
+      </div>
+    </div>
+    <div id="auth-err"></div>
   </div>
 </div>
 
@@ -751,7 +755,7 @@
   <!-- Sécurité -->
   <div class="card">
     <div class="card-title">Sécurité</div>
-    <button class="btn" onclick="changePin()">Changer le code PIN</button>
+    <button class="btn btn-danger" onclick="handleLogout()">Se déconnecter</button>
   </div>
 
   <!-- Danger zone -->
