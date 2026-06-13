@@ -76,7 +76,7 @@ function go(id, el) {
   if (id === 'transactions') renderTx();
   if (id === 'abonnements')  renderAbo();
   if (id === 'patrimoine')   renderPatrimoine();
-  if (id === 'dashboard')    renderDashAbo();
+  if (id === 'dashboard')    { renderDashAbo(); calcJoint(); }
   if (id === 'settings')     { renderSettingsAccounts(); loadSettingsUI(); }
   if (id === 'epargne') { calcEpargne(); setTimeout(initTRChart, 100); }
   if (id === 'bourse') { calcBourseProfil(); if (typeof restoreAgentAnalysis === 'function') restoreAgentAnalysis(); if (document.getElementById('bourse-tab-placements')?.style.display !== 'none') renderBoursePlacements(); }
@@ -405,8 +405,9 @@ function renderDashRecent() {
 function renderDashAbo() {
   const el = document.getElementById('dm-abo');
   if (!el) return;
-  const total = abonnements.reduce((s, a) => s + a.price, 0);
-  el.textContent = abonnements.length ? fmtE(total) : '— €';
+  const jointAccIds = new Set(accounts.filter(a => a.type === 'joint').map(a => a.id));
+  const personalTotal = abonnements.filter(a => !jointAccIds.has(a.account)).reduce((s, a) => s + a.price, 0);
+  el.textContent = personalTotal > 0 ? fmtE(personalTotal) : '— €';
 }
 
 // ── ABONNEMENTS ──
@@ -1367,7 +1368,7 @@ function loadSettingsUI() {
 // ── BUDGET ──
 const CHARGES_PERSO_BOURSO = 0;
 
-const _BUDGET_SLIDER_IDS = ['sl-rev','sl-contrib','sl-contrib-e','sl-contrib-as','sl-dv','sl-pp','sl-pj','sl-pi','sl-tr','sl-rd','sl-bourse-duree','sl-bourse-risque'];
+const _BUDGET_SLIDER_IDS = ['sl-rev','sl-rev-as','sl-contrib','sl-contrib-e','sl-contrib-as','sl-dv','sl-pp','sl-pj','sl-pi','sl-tr','sl-rd','sl-bourse-duree','sl-bourse-risque'];
 const _BUDGET_INPUT_IDS  = ['bourse-montant','bourse-mensuel'];
 
 function saveBudget() {
@@ -1391,8 +1392,10 @@ function calcBudget() {
   const rev = +document.getElementById('sl-rev').value;
   const contrib = +document.getElementById('sl-contrib').value;
   const dv = +document.getElementById('sl-dv').value;
+  const jointAccIds = new Set(accounts.filter(a => a.type === 'joint').map(a => a.id));
   const aboTotal = abonnements.reduce((s, a) => s + a.price, 0);
-  const disp = rev - contrib - CHARGES_PERSO_BOURSO - dv - aboTotal;
+  const personalAbo = abonnements.filter(a => !jointAccIds.has(a.account)).reduce((s, a) => s + a.price, 0);
+  const disp = rev - contrib - CHARGES_PERSO_BOURSO - dv - personalAbo;
   document.getElementById('sl-rev-out').textContent = rev.toLocaleString('fr-FR')+' €';
   document.getElementById('sl-contrib-out').textContent = contrib.toLocaleString('fr-FR')+' €';
   document.getElementById('sl-dv-out').textContent = dv.toLocaleString('fr-FR')+' €';
@@ -1422,6 +1425,113 @@ function calcBudget() {
   saveBudget();
 }
 
+async function analyzeBudgetAI() {
+  const btn   = document.getElementById('budget-analyze-btn');
+  const notif = document.getElementById('budget-ai-notif');
+
+  const showNotif = (html) => { if (notif) { notif.style.display = ''; notif.innerHTML = html; } };
+
+  if (!settings.aiApiKey) {
+    showNotif('<div class="notif">Configurez votre clé API dans <button class="btn btn-sm" onclick="go(\'settings\',document.querySelector(\'[onclick*=settings]\'))">Paramètres</button> pour activer l\'analyse IA.</div>');
+    return;
+  }
+  if (!transactions.length) {
+    showNotif('<div class="notif">Aucune transaction disponible. <button class="btn btn-sm" onclick="go(\'import\',document.querySelector(\'[onclick*=import]\'))">Importer un relevé</button> pour activer l\'analyse.</div>');
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  showNotif('<div class="notif info">Analyse IA en cours…</div>');
+
+  try {
+    // ── Agrégation des 6 derniers mois ──
+    const VAR_CATS = new Set(['alimentation','restaurant','sante','transport','loisirs','vetements','voyage','travaux','divers']);
+    const now = new Date();
+    const months = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      return d.toISOString().slice(0, 7);
+    });
+
+    const agg = {};
+    months.forEach(m => { agg[m] = { revenus: 0, depVar: 0, detail: {} }; });
+
+    transactions.forEach(t => {
+      const m = t.date?.slice(0, 7);
+      if (!agg[m]) return;
+      if (t.cat === 'salaire' && t.amount > 0) {
+        agg[m].revenus += t.amount;
+      }
+      if (VAR_CATS.has(t.cat) && t.amount < 0) {
+        agg[m].depVar += Math.abs(t.amount);
+        agg[m].detail[t.cat] = (agg[m].detail[t.cat] || 0) + Math.abs(t.amount);
+      }
+    });
+
+    const rows = months.map(m => {
+      const detail = Object.entries(agg[m].detail)
+        .map(([cat, v]) => `${CAT_LABELS[cat] || cat}: ${Math.round(v)}€`)
+        .join(', ') || '—';
+      return `${m} | revenus: ${Math.round(agg[m].revenus)}€ | dép. variables: ${Math.round(agg[m].depVar)}€ | ${detail}`;
+    }).join('\n');
+
+    const aboTotal   = Math.round(abonnements.reduce((s, a) => s + a.price, 0));
+    const accountsDesc = accounts.map(a => `${a.name} (${a.type})`).join(', ') || 'aucun';
+
+    const prompt = `Données financières des 6 derniers mois :
+${rows}
+
+Crédits & abonnements fixes déjà recensés : ${aboTotal}€/mois
+Comptes : ${accountsDesc}
+Transactions importées au total : ${transactions.length}
+
+Règles :
+- Exclure les mois avec 0€ de revenus (relevé non importé) du calcul des moyennes.
+- Revenu net = salaire net viré sur les comptes (catégorie "salaire").
+- Dépenses variables = toutes catégories hors crédits et abonnements fixes.
+- Arrondir chaque valeur au multiple de 50€ le plus proche.
+
+Réponds UNIQUEMENT en JSON valide sans markdown :
+{"revenu_net":0,"depenses_variables":0,"nb_mois_avec_donnees":0,"explication":""}`;
+
+    const txt = await callAI([
+      { role: 'system', content: 'Tu es un expert financier. Analyse des données bancaires et réponds uniquement en JSON valide, sans markdown ni texte autour.' },
+      { role: 'user', content: prompt },
+    ]);
+
+    const match = txt.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('Réponse IA invalide — réessayez.');
+    const { revenu_net, depenses_variables, nb_mois_avec_donnees, explication } = JSON.parse(match[0]);
+
+    // ── Mise à jour des curseurs ──
+    if (revenu_net > 0) {
+      const sl = document.getElementById('sl-rev');
+      if (sl) { sl.max = Math.max(+sl.max, Math.ceil(revenu_net / 1000) * 1000 + 2000); sl.value = revenu_net; }
+    }
+    if (depenses_variables > 0) {
+      const sl = document.getElementById('sl-dv');
+      if (sl) { sl.max = Math.max(+sl.max, Math.ceil(depenses_variables / 500) * 500 + 500); sl.value = depenses_variables; }
+    }
+    calcBudget();
+
+    showNotif(`<div class="notif success" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <div style="display:flex;justify-content:space-between;width:100%;align-items:baseline">
+        <strong>Analyse terminée</strong>
+        <span style="font-size:11px;color:var(--text3)">${nb_mois_avec_donnees || '?'} mois analysés</span>
+      </div>
+      <div style="font-size:12.5px;line-height:1.55">${explication}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:16px;font-size:12px;font-family:var(--mono);margin-top:2px">
+        <span>Revenus nets <strong style="color:var(--green)">${fmtE(revenu_net)}</strong></span>
+        <span>Dépenses variables <strong style="color:var(--amber)">${fmtE(depenses_variables)}</strong></span>
+      </div>
+    </div>`);
+
+  } catch(e) {
+    showNotif(`<div class="notif" style="background:var(--red-bg);color:var(--red)">Erreur : ${e.message}</div>`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✦ Analyser'; }
+  }
+}
+
 function calcJoint() {
   const e = +document.getElementById('sl-contrib-e').value;
   const as = +document.getElementById('sl-contrib-as').value;
@@ -1442,14 +1552,51 @@ function calcJoint() {
   // sync sl-contrib with sl-contrib-e
   const sc = document.getElementById('sl-contrib');
   if (sc) { sc.value = e; document.getElementById('sl-contrib-out').textContent = e.toLocaleString('fr-FR')+' €'; }
-  const rev = +document.getElementById('sl-rev').value;
-  const dv = +document.getElementById('sl-dv').value;
-  const aboTotal = abonnements.reduce((s, a) => s + a.price, 0);
-  const disp = rev - e - CHARGES_PERSO_BOURSO - dv - aboTotal;
-  document.getElementById('bm-cf').textContent = '-'+e.toLocaleString('fr-FR')+' €';
-  document.getElementById('bm-disp').textContent = disp.toLocaleString('fr-FR')+' €';
-  document.getElementById('dm-cf').textContent = '-'+e.toLocaleString('fr-FR')+' €';
-  document.getElementById('dm-disp').textContent = disp.toLocaleString('fr-FR')+' €';
+  const rev   = +document.getElementById('sl-rev').value;
+  const revAs = +document.getElementById('sl-rev-as')?.value || 0;
+  const dv    = +document.getElementById('sl-dv').value;
+  const jointAccIds = new Set(accounts.filter(a => a.type === 'joint').map(a => a.id));
+  const personalAbo = abonnements.filter(a => !jointAccIds.has(a.account)).reduce((s, a) => s + a.price, 0);
+  const jointAbo    = abonnements.filter(a =>  jointAccIds.has(a.account)).reduce((s, a) => s + a.price, 0);
+  const disp = rev - e - CHARGES_PERSO_BOURSO - dv - personalAbo;
+
+  // Affichage personnel
+  document.getElementById('bm-cf').textContent  = '-' + e.toLocaleString('fr-FR') + ' €';
+  document.getElementById('bm-disp').textContent = disp.toLocaleString('fr-FR') + ' €';
+  document.getElementById('dm-cf').textContent   = '-' + e.toLocaleString('fr-FR') + ' €';
+  document.getElementById('dm-disp').textContent  = disp.toLocaleString('fr-FR') + ' €';
+
+  // Partenaire — affichage revenus
+  const revAsOut = document.getElementById('sl-rev-as-out');
+  if (revAsOut) revAsOut.textContent = revAs.toLocaleString('fr-FR') + ' €';
+
+  // ── Métriques foyer ──
+  const foyerRevTotal  = rev + revAs;
+  const foyerBudget    = e + as;                                      // contributions des deux
+  const foyerCharges   = chargesJoint > 0 ? chargesJoint : jointAbo; // transactions réelles sinon abonnements déclarés
+  const foyerMarge     = foyerBudget - foyerCharges;
+
+  const _set = (id, txt, color) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = txt;
+    if (color !== undefined) el.style.color = color;
+  };
+
+  // Page Budget — Vue foyer
+  _set('foyer-rev',     fmtE(foyerRevTotal));
+  _set('foyer-contrib', fmtE(foyerBudget));
+  _set('foyer-charges', foyerCharges > 0 ? fmtE(foyerCharges) : '— €');
+  _set('foyer-marge',   (foyerMarge >= 0 ? '+' : '') + fmtE(foyerMarge),
+       foyerMarge >= 0 ? 'var(--green)' : 'var(--red)');
+
+  // Dashboard — Budget foyer
+  _set('dm-foyer-rev',     fmtE(foyerRevTotal));
+  _set('dm-foyer-contrib', fmtE(foyerBudget));
+  _set('dm-foyer-charges', foyerCharges > 0 ? fmtE(foyerCharges) : '— €');
+  _set('dm-foyer-marge',   (foyerMarge >= 0 ? '+' : '') + fmtE(foyerMarge),
+       foyerMarge >= 0 ? 'var(--green)' : 'var(--red)');
+
   updateSidebar();
 }
 

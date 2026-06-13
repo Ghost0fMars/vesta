@@ -236,6 +236,7 @@ async function runAgentAnalysis() {
     lastAgentAnalysis = analysis;
     saveAgentAnalysis(analysis);
     renderAgentSteps(analysis, null);
+    _updateAgentTickerChip();
   } catch (e) {
     // l'étape en erreur est déjà affichée
   } finally {
@@ -298,5 +299,126 @@ function restoreAgentAnalysis() {
     const t = document.getElementById('agent-ticker');
     if (t && !t.value) t.value = lastAgentAnalysis.ticker;
     renderAgentSteps(lastAgentAnalysis, null);
+    _updateAgentTickerChip();
   }
+}
+
+// ── CHAT CONTEXTUEL — Produits recommandés + Mes placements + Analyse ──
+
+let agentChatHistory = [];
+
+const AGENT_CHAT_SYSTEM = `Tu es un conseiller en investissement expert francophone. Tu as accès :
+1. Au profil d'investissement de l'utilisateur (capital, versements, durée, tolérance au risque)
+2. Aux produits recommandés par l'algorithme d'allocation pour ce profil
+3. Aux placements actuels de l'utilisateur (comptes épargne et investissement avec détail des positions)
+4. Aux résultats de la dernière analyse multi-agents sur un actif spécifique (si disponible)
+Ton rôle : répondre de façon précise, chiffrée et personnalisée. Compare les placements actuels avec l'allocation cible. Identifie les écarts, sur/sous-expositions. Propose des actions concrètes. Sois direct et concis.`;
+
+function getAgentChatContext() {
+  const userProfile = getBourseContext();
+
+  // Produits recommandés selon le profil actuel
+  const risque  = +document.getElementById('sl-bourse-risque')?.value || 3;
+  const montant = +document.getElementById('bourse-montant')?.value   || 0;
+  const alloc   = [...(BOURSE_BASE_ALLOC[risque - 1] || BOURSE_BASE_ALLOC[2])];
+  const CATS    = [
+    { key:'etf',     label:'ETF',           idx:0 },
+    { key:'actions', label:'Actions',        idx:1 },
+    { key:'oblig',   label:'Obligations',    idx:2 },
+    { key:'crypto',  label:'Crypto',         idx:3 },
+    { key:'matprem', label:'Mat. premières', idx:4 },
+  ];
+  let prodTxt = 'PRODUITS RECOMMANDÉS (allocation cible) :\n';
+  CATS.filter(c => alloc[c.idx] > 0).forEach(c => {
+    const items  = BOURSE_PRODUCTS[c.key].slice(0, risque <= 2 ? 2 : 3);
+    const euros  = montant > 0 ? ` (~${fmtE(Math.round(montant * alloc[c.idx] / 100))})` : '';
+    prodTxt += `• ${c.label} ${alloc[c.idx]}%${euros} : ${items.map(p => p.ticker + ' – ' + p.name).join(', ')}\n`;
+  });
+
+  // Placements actuels
+  const finAccounts = accounts.filter(a => ['epargne','invest'].includes(a.type));
+  let placTxt = 'PLACEMENTS ACTUELS :\n';
+  if (finAccounts.length) {
+    const total = finAccounts.reduce((s, a) => s + (a.balance || 0), 0);
+    placTxt += `Total : ${fmtE(total)}\n`;
+    finAccounts.forEach(a => {
+      placTxt += `• ${a.name} (${a.bank || '—'}, ${a.type === 'invest' ? 'investissement' : 'épargne'}) : ${fmtE(a.balance || 0)}`;
+      if (a.holdings?.length) {
+        placTxt += `\n  Holdings : ${a.holdings.map(h => `${h.name}${h.ticker ? ' (' + h.ticker + ')' : ''} → ${fmtE(h.value || 0)}`).join(' | ')}`;
+      }
+      placTxt += '\n';
+    });
+  } else {
+    placTxt += 'Aucun placement enregistré.\n';
+  }
+
+  // Dernière analyse multi-agents
+  let analysisTxt = '';
+  if (lastAgentAnalysis?.steps?.length) {
+    analysisTxt = `\nDERNIÈRE ANALYSE MULTI-AGENTS — ${lastAgentAnalysis.ticker} :\n`;
+    if (lastAgentAnalysis.decision) {
+      analysisTxt += `Décision : ${lastAgentAnalysis.decision}`;
+      if (lastAgentAnalysis.conviction != null) analysisTxt += ` (conviction ${lastAgentAnalysis.conviction}/10)`;
+      analysisTxt += '\n';
+    }
+    const portfolioStep = lastAgentAnalysis.steps.find(s => s.key === 'portfolio');
+    if (portfolioStep?.text) {
+      analysisTxt += `Conclusion du gestionnaire :\n${portfolioStep.text.slice(0, 700)}\n`;
+    }
+  }
+
+  return `PROFIL : ${userProfile}\n\n${prodTxt}\n${placTxt}${analysisTxt}`;
+}
+
+async function sendAgentChat() {
+  const inp = document.getElementById('agent-chat-input');
+  const msg = inp?.value.trim();
+  if (!msg) return;
+  inp.value = '';
+
+  _addAgentChatMsg(msg, 'user');
+  const loadingEl = _addAgentChatMsg('…', 'ai loading');
+  agentChatHistory.push({ role: 'user', content: msg });
+
+  try {
+    const ctx = getAgentChatContext();
+    const sys  = AGENT_CHAT_SYSTEM + '\n\n' + AGENT_LANG + '\n\nDONNÉES UTILISATEUR :\n' + ctx;
+    const txt  = await callAI([{ role: 'system', content: sys }, ...agentChatHistory]);
+    loadingEl.classList.remove('loading');
+    loadingEl.innerHTML = miniMD(txt);
+    agentChatHistory.push({ role: 'assistant', content: txt });
+    if (agentChatHistory.length > 20) agentChatHistory = agentChatHistory.slice(-20);
+  } catch(e) {
+    loadingEl.classList.remove('loading');
+    loadingEl.textContent = 'Erreur : ' + e.message;
+  }
+}
+
+function _addAgentChatMsg(text, cls) {
+  const msgs = document.getElementById('agent-chat-msgs');
+  if (!msgs) return null;
+  const d = document.createElement('div');
+  d.className = 'chat-msg ' + cls;
+  if (cls.includes('loading')) d.textContent = text;
+  else d.innerHTML = miniMD(text);
+  msgs.appendChild(d);
+  msgs.scrollTop = msgs.scrollHeight;
+  return d;
+}
+
+function askAgentChat(q) {
+  const inp = document.getElementById('agent-chat-input');
+  if (!inp) return;
+  inp.value = q;
+  sendAgentChat();
+}
+
+function _updateAgentTickerChip() {
+  const chip = document.getElementById('agent-chip-ticker');
+  if (!chip || !lastAgentAnalysis?.ticker) return;
+  const ticker = lastAgentAnalysis.ticker;
+  chip.style.display = '';
+  chip.textContent = `Intégrer ${ticker} dans mon portfolio`;
+  chip.setAttribute('onclick',
+    `askAgentChat("L'actif ${ticker} analysé (${lastAgentAnalysis.decision || 'décision inconnue'}) est-il cohérent avec mes placements actuels et mon profil ? Dois-je l'ajouter à mon portefeuille ?")`);
 }

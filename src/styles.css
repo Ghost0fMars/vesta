@@ -49,6 +49,13 @@
 html { font-size: 14px; }
 body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
 
+/* SCROLLBARS */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+* { scrollbar-width: thin; scrollbar-color: var(--border2) transparent; }
+
 /* AUTH SCREEN */
 #auth-screen { position:fixed; inset:0; background:var(--bg); display:flex; align-items:center; justify-content:center; z-index:9999; padding:1rem; }
 #auth-screen.hidden { display:none; }
