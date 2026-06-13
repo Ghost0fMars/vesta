@@ -95,41 +95,55 @@ function fmtE(n) { return (n < 0 ? '-' : '') + Math.abs(n).toLocaleString('fr-FR
 function fmtK(n) { return n >= 1000000 ? (n/1000000).toFixed(2)+' M€' : n >= 1000 ? (n/1000).toFixed(0)+' K€' : fmtE(n); }
 
 // ── CHARTS ──
-function buildDonutData() {
-  const rev      = +document.getElementById('sl-rev')?.value     || 0;
-  const contrib  = +document.getElementById('sl-contrib')?.value  || 0;
-  const dv       = +document.getElementById('sl-dv')?.value       || 0;
-  const aboTotal = abonnements.reduce((s, a) => s + a.price, 0);
-  const epargne  = Math.max(0, rev - contrib - aboTotal - dv);
+const _DONUT_EMPTY = { labels:['Aucune donnée'], data:[1], colors:['rgba(155,152,144,0.18)'], empty:true };
 
-  if (rev === 0) {
-    return { labels:['Aucune donnée'], data:[1], colors:['rgba(155,152,144,0.18)'], empty:true };
-  }
-
+function buildDonutDataPerso() {
+  const rev    = +document.getElementById('sl-rev')?.value    || 0;
+  const contrib = +document.getElementById('sl-contrib')?.value || 0;
+  const dv      = +document.getElementById('sl-dv')?.value     || 0;
+  const jointSet = new Set(accounts.filter(a => a.type === 'joint').map(a => a.id));
+  const personalAbo = abonnements.filter(a => !jointSet.has(a.account)).reduce((s, a) => s + a.price, 0);
+  const epargne = Math.max(0, rev - contrib - personalAbo - dv);
+  if (rev === 0) return _DONUT_EMPTY;
   const labels = [], data = [], colors = [];
-  if (contrib   > 0) { labels.push('Contribution foyer'); data.push(contrib);   colors.push('#8b2020'); }
-  if (aboTotal  > 0) { labels.push('Crédits & Abonnements'); data.push(aboTotal); colors.push('#3a6b8a'); }
-  if (dv        > 0) { labels.push('Dépenses variables'); data.push(dv);        colors.push('#7a4f0d'); }
-  if (epargne   > 0) { labels.push('Épargne');            data.push(epargne);   colors.push('#1a6b4a'); }
+  if (contrib     > 0) { labels.push('Contribution joint'); data.push(contrib);     colors.push('#8b2020'); }
+  if (personalAbo > 0) { labels.push('Abonnements perso');  data.push(personalAbo); colors.push('#3a6b8a'); }
+  if (dv          > 0) { labels.push('Dépenses variables'); data.push(dv);          colors.push('#7a4f0d'); }
+  if (epargne     > 0) { labels.push('Épargne');            data.push(epargne);     colors.push('#1a6b4a'); }
+  return data.length ? { labels, data, colors, empty:false } : _DONUT_EMPTY;
+}
 
-  if (!data.length) return { labels:['Aucune donnée'], data:[1], colors:['rgba(155,152,144,0.18)'], empty:true };
-  return { labels, data, colors, empty:false };
+function buildDonutDataFoyer() {
+  const e  = +document.getElementById('sl-contrib-e')?.value  || 0;
+  const as = +document.getElementById('sl-contrib-as')?.value || 0;
+  const foyerBudget = e + as;
+  if (foyerBudget === 0) return _DONUT_EMPTY;
+  const jointSet = new Set(accounts.filter(a => a.type === 'joint').map(a => a.id));
+  const charges = abonnements.filter(a => jointSet.has(a.account)).reduce((s, a) => s + a.price, 0);
+  const marge   = Math.max(0, foyerBudget - charges);
+  const labels = [], data = [], colors = [];
+  if (charges > 0) { labels.push('Charges joint'); data.push(charges); colors.push('#8b2020'); }
+  if (marge   > 0) { labels.push('Marge foyer');   data.push(marge);   colors.push('#1a6b4a'); }
+  return data.length ? { labels, data, colors, empty:false } : _DONUT_EMPTY;
+}
+
+function _applyDonut(chartKey, legendId, d) {
+  const ch = charts[chartKey];
+  if (ch) {
+    ch.data.labels = d.labels;
+    ch.data.datasets[0].data = d.data;
+    ch.data.datasets[0].backgroundColor = d.colors;
+    ch.update();
+  }
+  const el = document.getElementById(legendId);
+  if (el) el.innerHTML = d.empty
+    ? '<span style="font-size:11px;color:var(--text3)">—</span>'
+    : d.labels.map((l,i) => `<span class="leg-item"><span class="leg-dot" style="background:${d.colors[i]}"></span>${l}</span>`).join('');
 }
 
 function updateDonutChart() {
-  const donut = buildDonutData();
-  if (charts['donut']) {
-    charts['donut'].data.labels = donut.labels;
-    charts['donut'].data.datasets[0].data = donut.data;
-    charts['donut'].data.datasets[0].backgroundColor = donut.colors;
-    charts['donut'].update();
-  }
-  const legendEl = document.getElementById('donut-legend');
-  if (legendEl) {
-    legendEl.innerHTML = donut.empty
-      ? '<span style="font-size:11px;color:var(--text3)">Renseignez votre budget pour voir la répartition</span>'
-      : donut.labels.map((l,i) => `<span class="leg-item"><span class="leg-dot" style="background:${donut.colors[i]}"></span>${l}</span>`).join('');
-  }
+  _applyDonut('donut',       'donut-legend',       buildDonutDataPerso());
+  _applyDonut('donut-foyer', 'donut-legend-foyer', buildDonutDataFoyer());
 }
 
 const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
@@ -195,13 +209,21 @@ function initCharts() {
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
       scales:{x:{ticks:{color:tc,font:{size:11}},grid:{color:gc}},y:{ticks:{color:tc,callback:v=>(v/1000).toFixed(0)+'K€'},grid:{color:gc}}}}
   });
-  // Donut — calculé depuis les sliders budget
-  const donut = buildDonutData();
+  // Donuts — budget personnel et foyer
+  const donutOpts = { responsive:true, maintainAspectRatio:false, cutout:'68%', plugins:{ legend:{ display:false } } };
+  const dp = buildDonutDataPerso();
   destroyChart('donut');
   charts['donut'] = new Chart(document.getElementById('c-donut'), {
     type:'doughnut',
-    data:{labels:donut.labels, datasets:[{data:donut.data, backgroundColor:donut.colors, borderWidth:0}]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{display:false}}}
+    data:{ labels:dp.labels, datasets:[{ data:dp.data, backgroundColor:dp.colors, borderWidth:0 }] },
+    options: donutOpts,
+  });
+  const df = buildDonutDataFoyer();
+  destroyChart('donut-foyer');
+  charts['donut-foyer'] = new Chart(document.getElementById('c-donut-foyer'), {
+    type:'doughnut',
+    data:{ labels:df.labels, datasets:[{ data:df.data, backgroundColor:df.colors, borderWidth:0 }] },
+    options: donutOpts,
   });
   // Dépenses variables du mois — dynamiques
   const varD = buildVarData();
@@ -344,10 +366,12 @@ function renderTx() {
   if (sum) sum.textContent = `${filtered.length} transaction(s) · Solde net : ${fmtE(total)}`;
 }
 function updateTotalLiquidity() {
-  const el = document.getElementById('dm-total-liq');
-  if (!el) return;
-  const total = accounts.reduce((s, a) => s + (a.balance || 0), 0);
-  el.textContent = fmtE(total);
+  const personal = accounts.filter(a => a.type !== 'joint').reduce((s, a) => s + (a.balance || 0), 0);
+  const joint    = accounts.filter(a => a.type === 'joint').reduce((s, a) => s + (a.balance || 0), 0);
+  const elPerso  = document.getElementById('dm-total-liq');
+  const elFoyer  = document.getElementById('dm-foyer-liq');
+  if (elPerso) elPerso.textContent = fmtE(personal);
+  if (elFoyer) elFoyer.textContent = fmtE(joint);
 }
 
 function updateTRBalance() {

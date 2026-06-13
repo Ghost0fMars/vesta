@@ -125,9 +125,9 @@
   <div class="mg" id="dash-metrics" style="margin-bottom:1.25rem">
     <div class="metric"><div class="metric-label">Mes revenus</div><div class="metric-value g" id="dm-rev">— €</div><div class="metric-delta">nets / mois</div></div>
     <div class="metric"><div class="metric-label">Ma contribution joint</div><div class="metric-value r" id="dm-cf">— €</div><div class="metric-delta">versé compte joint</div></div>
-    <div class="metric"><div class="metric-label">Disponible perso</div><div class="metric-value b" id="dm-disp">— €</div><div class="metric-delta">après contribution</div></div>
-    <div class="metric"><div class="metric-label">Total liquidités</div><div class="metric-value p" id="dm-total-liq">— €</div><div class="metric-delta">tous comptes</div></div>
     <div class="metric" style="cursor:pointer" onclick="go('abonnements',document.querySelector('[onclick*=abonnements]'))"><div class="metric-label">Abonnements perso</div><div class="metric-value r" id="dm-abo">— €</div><div class="metric-delta">/ mois</div></div>
+    <div class="metric"><div class="metric-label">Disponible perso</div><div class="metric-value b" id="dm-disp">— €</div><div class="metric-delta">après contribution</div></div>
+    <div class="metric"><div class="metric-label">Total liquidités</div><div class="metric-value p" id="dm-total-liq">— €</div><div class="metric-delta">comptes perso</div></div>
   </div>
   <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px">Budget foyer</div>
   <div class="mg" style="margin-bottom:1.5rem">
@@ -135,6 +135,7 @@
     <div class="metric"><div class="metric-label">Budget commun</div><div class="metric-value b" id="dm-foyer-contrib">— €</div><div class="metric-delta">contributions versées</div></div>
     <div class="metric"><div class="metric-label">Charges foyer</div><div class="metric-value r" id="dm-foyer-charges">— €</div><div class="metric-delta">crédit + prélèvements</div></div>
     <div class="metric"><div class="metric-label">Marge foyer</div><div class="metric-value" id="dm-foyer-marge">— €</div><div class="metric-delta">budget - charges</div></div>
+    <div class="metric"><div class="metric-label">Liquidités joint</div><div class="metric-value p" id="dm-foyer-liq">— €</div><div class="metric-delta">solde compte joint</div></div>
   </div>
 
   <div class="card accounts-card">
@@ -151,9 +152,21 @@
     </div>
     <div class="card">
       <div class="card-title">Répartition budget</div>
-      <div class="chart-wrap" style="height:160px"><canvas id="c-donut" role="img" aria-label="Répartition du budget">Répartition budget</canvas></div>
-      <div class="legend-row" style="margin-top:10px" id="donut-legend">
-        <span style="font-size:11px;color:var(--text3)">Renseignez votre budget pour voir la répartition</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);text-align:center;margin-bottom:4px">Personnel</div>
+          <div class="chart-wrap" style="height:130px"><canvas id="c-donut" role="img" aria-label="Répartition budget personnel">Répartition perso</canvas></div>
+          <div id="donut-legend" style="margin-top:7px;display:flex;flex-wrap:wrap;gap:4px 10px">
+            <span style="font-size:11px;color:var(--text3)">Renseignez votre budget</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);text-align:center;margin-bottom:4px">Foyer</div>
+          <div class="chart-wrap" style="height:130px"><canvas id="c-donut-foyer" role="img" aria-label="Répartition budget foyer">Répartition foyer</canvas></div>
+          <div id="donut-legend-foyer" style="margin-top:7px;display:flex;flex-wrap:wrap;gap:4px 10px">
+            <span style="font-size:11px;color:var(--text3)">Renseignez les contributions</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
