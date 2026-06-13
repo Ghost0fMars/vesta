@@ -19,7 +19,7 @@ Application web de gestion financière personnelle et patrimoniale, alimentée p
 
 ## Aperçu
 
-Vesta est une application de gestion de patrimoine tout-en-un, conçue pour vous donner une vision claire et complète de vos finances. Elle intègre le suivi des transactions, la gestion budgétaire, l'analyse d'investissements boursiers par IA, et un conseiller financier intelligent accessible directement depuis l'interface.
+Vesta est une application de gestion de patrimoine tout-en-un, conçue pour vous donner une vision claire et complète de vos finances. Elle intègre le suivi des transactions, la gestion budgétaire, l'analyse boursière avec IA multi-agents, et bien plus encore.
 
 ---
 
@@ -171,6 +171,17 @@ npm start
 
 ---
 
+## À propos
+
+Vesta est développée par **àlaclé**, une association loi 1901 basée en France.
+
+- **Numéro RNA** : W131016315
+- **Contact** : contact@alacle.org
+
+---
+
 ## Licence
 
-Projet privé — tous droits réservés.
+Ce projet est licencié sous la [Licence Apache 2.0](LICENSE).
+
+Copyright (c) 2026 àlaclé
