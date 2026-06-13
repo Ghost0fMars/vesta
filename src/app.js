@@ -1555,9 +1555,9 @@ function calcJoint() {
   const rev   = +document.getElementById('sl-rev').value;
   const revAs = +document.getElementById('sl-rev-as')?.value || 0;
   const dv    = +document.getElementById('sl-dv').value;
-  const jointAccIds = new Set(accounts.filter(a => a.type === 'joint').map(a => a.id));
-  const personalAbo = abonnements.filter(a => !jointAccIds.has(a.account)).reduce((s, a) => s + a.price, 0);
-  const jointAbo    = abonnements.filter(a =>  jointAccIds.has(a.account)).reduce((s, a) => s + a.price, 0);
+  const jointAccSet = new Set(accounts.filter(a => a.type === 'joint').map(a => a.id));
+  const personalAbo = abonnements.filter(a => !jointAccSet.has(a.account)).reduce((s, a) => s + a.price, 0);
+  const jointAbo    = abonnements.filter(a =>  jointAccSet.has(a.account)).reduce((s, a) => s + a.price, 0);
   const disp = rev - e - CHARGES_PERSO_BOURSO - dv - personalAbo;
 
   // Affichage personnel
