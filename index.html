@@ -520,6 +520,10 @@
       <button class="tab" id="btab-placements" onclick="switchBourseTab('placements',this)">Mes placements</button>
     </div>
     <div id="bourse-tab-recomm" style="padding-top:12px;padding-bottom:1.25rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px">
+        <span style="font-size:11px;color:var(--text3);flex:1" id="bourse-ai-status">Sélection statique basée sur votre profil</span>
+        <button class="btn btn-sm" id="btn-bourse-refresh" onclick="refreshBourseProducts()" style="flex-shrink:0">✦ Actualiser via IA</button>
+      </div>
       <div id="bourse-produits"><div style="color:var(--text3);font-size:13px;padding:.5rem 0;text-align:center">Renseignez votre profil pour voir les recommandations.</div></div>
     </div>
     <div id="bourse-tab-placements" style="display:none;padding-top:12px;padding-bottom:1.25rem">

@@ -2307,6 +2307,7 @@ function askAI(q) {
 const BOURSE_SYSTEM = `Tu es un conseiller en investissement boursier expert francophone. Tu analyses les marchés financiers et conseilles sur les placements (ETF, actions, obligations, crypto-monnaies, matières premières) adaptés au profil de l'utilisateur. Tu es direct, chiffré et pratique. Cite toujours des exemples concrets (tickers, produits réels). Rappelle les risques sans être alarmiste. Les performances passées ne préjugent pas des performances futures.`;
 
 let bourseHistory = [];
+let _bourseAIProducts = null;
 
 const BOURSE_PROFILES = ['Défensif','Prudent','Modéré','Dynamique','Agressif'];
 const BOURSE_PROFILE_COLORS = ['var(--green)','var(--blue)','var(--purple)','var(--amber)','var(--red)'];
@@ -2512,17 +2513,19 @@ function calcBourseProfil() {
 function renderBourseProducts(risque, alloc) {
   const el = document.getElementById('bourse-produits');
   if (!el) return;
+  const src = _bourseAIProducts || BOURSE_PRODUCTS;
   const cats = [
     { key:'etf',     label:'ETF',           idx:0 },
     { key:'actions', label:'Actions',        idx:1 },
     { key:'oblig',   label:'Obligations',   idx:2 },
     { key:'crypto',  label:'Crypto',         idx:3 },
     { key:'matprem', label:'Mat. premières', idx:4 },
-  ].filter(c => alloc[c.idx] > 0);
+  ].filter(c => alloc[c.idx] > 0 && src[c.key]?.length);
 
   let html = '';
   for (const cat of cats) {
-    const items = BOURSE_PRODUCTS[cat.key].slice(0, risque <= 2 ? 2 : 3);
+    const maxItems = _bourseAIProducts ? 4 : (risque <= 2 ? 2 : 3);
+    const items = src[cat.key].slice(0, maxItems);
     const color = BOURSE_ASSET_COLORS[cat.idx];
     html += `<div style="margin-bottom:16px">
       <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:${color};margin-bottom:8px">${cat.label} — ${alloc[cat.idx]}%</div>`;
@@ -2530,12 +2533,85 @@ function renderBourseProducts(risque, alloc) {
       html += `<div class="tx-row" style="cursor:default">
         <div style="font-family:var(--mono);font-size:11px;color:var(--text3);min-width:52px;flex-shrink:0">${p.ticker}</div>
         <div class="tx-info"><div class="tx-name">${p.name}</div><div class="tx-meta">${p.desc}</div></div>
-        <span class="badge ${BOURSE_RISK_BADGE[p.risk]}">${p.risk}</span>
+        <span class="badge ${BOURSE_RISK_BADGE[p.risk] || 'badge-b'}">${p.risk}</span>
       </div>`;
     });
     html += '</div>';
   }
   el.innerHTML = html || '<div style="color:var(--text3);font-size:13px;padding:.5rem 0;text-align:center">Renseignez votre profil pour voir les recommandations.</div>';
+}
+
+async function refreshBourseProducts() {
+  const btn    = document.getElementById('btn-bourse-refresh');
+  const status = document.getElementById('bourse-ai-status');
+  const el     = document.getElementById('bourse-produits');
+
+  if (!settings.aiApiKey) {
+    if (status) status.textContent = 'Clé API manquante — configurez-la dans Paramètres.';
+    return;
+  }
+
+  const montant = +document.getElementById('bourse-montant')?.value || 0;
+  const mensuel = +document.getElementById('bourse-mensuel')?.value || 0;
+  const duree   = +document.getElementById('sl-bourse-duree')?.value || 10;
+  const risque  = +document.getElementById('sl-bourse-risque')?.value || 3;
+
+  let alloc = [...BOURSE_BASE_ALLOC[risque - 1]];
+  if (duree <= 3) {
+    const equity = alloc[0] + alloc[1] + alloc[3];
+    if (equity > 20) {
+      const f = 20 / equity;
+      alloc[0] = Math.round(alloc[0] * f);
+      alloc[1] = Math.round(alloc[1] * f);
+      alloc[3] = 0;
+      alloc[2] = 100 - alloc[0] - alloc[1] - alloc[4];
+    }
+  }
+
+  const profil    = BOURSE_PROFILES[risque - 1];
+  const allocDesc = BOURSE_ASSET_LABELS.map((l, i) => alloc[i] > 0 ? `${l} ${alloc[i]}%` : '').filter(Boolean).join(', ');
+  const activeCats = ['etf','actions','oblig','crypto','matprem'].filter((_,i) => alloc[i] > 0);
+
+  if (btn)  { btn.disabled = true; btn.textContent = '…'; }
+  if (el)   el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:1rem 0;text-align:center"><span class="agent-spinner"></span> Analyse IA en cours…</div>';
+  if (status) status.textContent = 'Analyse du marché en cours…';
+
+  try {
+    const today = new Date().toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+    const prompt = `Date d'aujourd'hui : ${today}.
+
+Profil investisseur : ${profil} (risque ${risque}/5).
+Capital initial : ${montant} €. Versement mensuel : ${mensuel} €. Horizon : ${duree} an${duree > 1 ? 's' : ''}.
+Allocation cible : ${allocDesc}.
+
+Pour chaque classe d'actifs allouée, propose entre 2 et 4 produits concrets et pertinents dans le contexte de marché actuel, adaptés à ce profil.
+- ETF : préférer les ETF éligibles PEA ou assurance-vie si possible.
+- Obligations : inclure fonds euros si profil défensif.
+- Chaque produit doit avoir un ticker réel ou "—" si non coté.
+- Le champ "desc" : 1 phrase max, frais ou rendement si connu.
+- Le champ "risk" : exactement l'une de ces valeurs : "Nul", "Très faible", "Faible", "Moyen", "Élevé", "Très élevé".
+
+Réponds UNIQUEMENT en JSON valide sans markdown, avec uniquement les clés ${activeCats.join(', ')} :
+{${activeCats.map(k => `"${k}":[{"name":"","ticker":"","desc":"","risk":""}]`).join(',')}}`;
+
+    const txt = await callAI([
+      { role:'system', content: BOURSE_SYSTEM },
+      { role:'user',   content: prompt },
+    ]);
+
+    const match = txt.match(/\{[\s\S]*\}/);
+    if (!match) throw new Error('Réponse IA non parseable — réessayez.');
+    _bourseAIProducts = JSON.parse(match[0]);
+
+    renderBourseProducts(risque, alloc);
+    const now = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+    if (status) status.textContent = `✓ Actualisé par l'IA · ${now}`;
+  } catch(e) {
+    if (el)     el.innerHTML = `<div style="color:var(--red);font-size:13px;padding:.5rem 0">Erreur : ${e.message}</div>`;
+    if (status) status.textContent = 'Erreur IA — réessayez.';
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✦ Actualiser via IA'; }
+  }
 }
 
 async function sendBourseChat() {
