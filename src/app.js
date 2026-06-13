@@ -215,14 +215,14 @@ function initCharts() {
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
       scales:{x:{ticks:{color:tc,font:{size:11},callback:v=>v+'€'},grid:{color:gc}},y:{ticks:{color:tc,font:{size:11}},grid:{display:false}}}}
   });
-  // Patrimoine — courbe d'amortissement ou zéros par défaut
+  // Patrimoine — projection patrimoine net
   destroyChart('pat');
   const patLabels = Array.from({length:11},(_,i)=> i===0?'Auj.':`+${i} an${i>1?'s':''}`);
-  const patData   = Array.from({length:11},()=>0);
   charts['pat'] = new Chart(document.getElementById('c-pat'), {
     type:'line',
-    data:{labels:patLabels,datasets:[{label:'Capital restant dû',data:patData,borderColor:'#8b2020',backgroundColor:'rgba(139,32,32,.08)',fill:true,tension:.35,pointRadius:3,borderWidth:2}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+    data:{labels:patLabels,datasets:[]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false,labels:{color:tc,font:{size:11},boxWidth:12,padding:12}}},
       scales:{x:{ticks:{color:tc,font:{size:10}},grid:{color:gc}},y:{ticks:{color:tc,callback:v=>fmtK(v)},grid:{color:gc}}}}
   });
 }
@@ -654,6 +654,14 @@ function _calcCRD(montant, tauxAnnuel, dureeMois, k) {
   return montant * (Math.pow(1+r, dureeMois) - Math.pow(1+r, k)) / (Math.pow(1+r, dureeMois) - 1);
 }
 
+// Mensualité annuités constantes (hors assurance)
+function _calcMensualite(montant, tauxAnnuel, dureeMois) {
+  if (!montant || !dureeMois) return 0;
+  const r = tauxAnnuel / 12 / 100;
+  if (r < 1e-6) return montant / dureeMois;
+  return montant * r * Math.pow(1+r, dureeMois) / (Math.pow(1+r, dureeMois) - 1);
+}
+
 function getCapitalRestantToday(credit) {
   const today = new Date().toISOString().slice(0, 10);
   // Méthode 1 : lookup dans le tableau d'amortissement importé
@@ -1045,10 +1053,10 @@ function deleteCreditImmo(id) {
   saveState(); renderPatrimoine();
 }
 
-function updateValeurBienCredit(id, val) {
+function updateCreditField(id, field, value) {
   const c = creditsImmo.find(c => c.id === id);
   if (!c) return;
-  c.valeurBien = parseFloat(val) || 0;
+  c[field] = value;
   saveState(); renderPatrimoine();
 }
 
@@ -1135,27 +1143,64 @@ function renderPatrimoine() {
     const moisRest   = Math.max(0, (c.dureeMois||0) - moisPayés);
     const progress   = c.dureeMois ? Math.min(100, Math.round(moisPayés / c.dureeMois * 100)) : 0;
     const finStr     = dateFin ? dateFin.toLocaleDateString('fr-FR',{month:'short',year:'numeric'}) : '—';
+    // Mensualité : valeur importée en priorité, sinon calculée par la formule
+    const mensualite = c.mensualite || Math.round(_calcMensualite(c.montantInitial, c.tauxAnnuel||0, c.dureeMois||0));
+
+    const finPreStr = moisRest > 0
+      ? `${progress}% remboursé · ${moisRest} mois restants${finStr !== '—' ? ' · fin ' + finStr : ''}`
+      : `${progress}% remboursé`;
 
     return `<div style="padding:10px 0;border-bottom:1px solid var(--border)">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px">
-        <span style="font-size:13px;font-weight:500">${c.name}</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <input type="text" value="${c.name.replace(/"/g,'&quot;')}"
+          style="font-size:13px;font-weight:500;background:transparent;border:none;border-bottom:1px solid transparent;color:var(--text);padding:0;font-family:var(--font);width:220px;outline:none"
+          onfocus="this.style.borderBottomColor='var(--border2)'"
+          onblur="this.style.borderBottomColor='transparent';updateCreditField(${c.id},'name',this.value)">
         <span style="font-family:var(--mono);font-size:13px;color:var(--red)">${fmtE(Math.round(crd))}</span>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:10px 20px;font-size:11px;color:var(--text3);margin-bottom:6px">
-        ${c.montantInitial ? `<span>Initial : ${fmtE(c.montantInitial)}</span>` : ''}
-        ${c.tauxAnnuel     ? `<span>Taux : ${c.tauxAnnuel} %</span>` : ''}
-        ${c.mensualite     ? `<span>Mensualité : ${fmtE(c.mensualite)}</span>` : ''}
-        ${dateFin          ? `<span>Fin prévue : ${finStr}</span>` : ''}
-        ${moisRest > 0     ? `<span>${moisRest} mois restants</span>` : ''}
+      <div style="display:flex;flex-wrap:wrap;gap:8px 14px;margin-bottom:10px;align-items:flex-end">
+        <label style="display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Initial (€)</span>
+          <input type="number" value="${c.montantInitial||''}" step="1000" min="0"
+            style="width:110px;font-size:12px;padding:4px 7px;font-family:var(--mono)"
+            onchange="updateCreditField(${c.id},'montantInitial',+this.value)">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Taux (%)</span>
+          <input type="number" value="${c.tauxAnnuel||''}" step="0.01" min="0" max="20"
+            style="width:72px;font-size:12px;padding:4px 7px;font-family:var(--mono)"
+            onchange="updateCreditField(${c.id},'tauxAnnuel',+this.value)">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Mensualité (€)</span>
+          <input type="number" value="${Math.round(mensualite)||''}" step="10" min="0"
+            style="width:100px;font-size:12px;padding:4px 7px;font-family:var(--mono)"
+            onchange="updateCreditField(${c.id},'mensualite',+this.value)">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Date début</span>
+          <input type="date" value="${c.dateDebut||''}"
+            style="width:138px;font-size:12px;padding:4px 7px"
+            onchange="updateCreditField(${c.id},'dateDebut',this.value)">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Durée (mois)</span>
+          <input type="number" value="${c.dureeMois||''}" step="12" min="12"
+            style="width:90px;font-size:12px;padding:4px 7px;font-family:var(--mono)"
+            onchange="updateCreditField(${c.id},'dureeMois',+this.value)">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Valeur du bien (€)</span>
+          <input type="number" value="${c.valeurBien||''}" step="1000" min="0"
+            style="width:130px;font-size:12px;padding:4px 7px;font-family:var(--mono)"
+            onchange="updateCreditField(${c.id},'valeurBien',+this.value)">
+        </label>
       </div>
-      <div style="background:var(--border);border-radius:3px;height:4px;overflow:hidden">
-        <div style="height:100%;background:var(--red);width:${progress}%;border-radius:3px"></div>
+      <div style="background:var(--border);border-radius:3px;height:3px;overflow:hidden">
+        <div style="height:100%;background:var(--red);width:${progress}%;border-radius:3px;transition:width .3s"></div>
       </div>
-      <div style="font-size:10px;color:var(--text3);margin:2px 0 8px">${progress}% remboursé</div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <input type="number" value="${c.valeurBien||''}" placeholder="Valeur du bien (€)"
-          style="font-size:11px;padding:3px 6px;width:170px" step="1000"
-          onchange="updateValeurBienCredit(${c.id}, this.value)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
+        <span style="font-size:10px;color:var(--text3)">${finPreStr}</span>
         <span style="font-size:11px;color:var(--text3);cursor:pointer" onclick="deleteCreditImmo(${c.id})">✕ Supprimer</span>
       </div>
     </div>`;
@@ -1171,12 +1216,28 @@ function renderPatrimoine() {
 function _updatePatChart(credits) {
   if (!charts['pat']) return;
   const now = new Date();
-  const labels = [], data = [];
-  for (let y = 0; y <= 10; y++) {
+
+  // Durée : jusqu'à la fin du crédit le plus long (entre 10 et 30 ans)
+  const maxYears = credits.reduce((max, c) => {
+    const start = c.dateDebut ? new Date(c.dateDebut) : now;
+    const k = Math.max(0, (now.getFullYear()-start.getFullYear())*12 + (now.getMonth()-start.getMonth()));
+    return Math.max(max, Math.ceil(Math.max(0, (c.dureeMois||0) - k) / 12));
+  }, 10);
+  const years = Math.min(30, Math.max(10, maxYears));
+
+  const totalValeurBien = credits.reduce((s,c) => s + (c.valeurBien||0), 0);
+  const hasValeur = totalValeurBien > 0;
+
+  const labels = [], dataCRD = [], dataNet = [], dataBien = [];
+
+  for (let y = 0; y <= years; y++) {
     const d = new Date(now.getFullYear() + y, now.getMonth(), 1);
     const future = d.toISOString().slice(0,10);
     labels.push(y === 0 ? 'Auj.' : `+${y} an${y>1?'s':''}`);
-    const crd = credits.reduce((s,c) => {
+
+    // CRD total à l'instant t — utilise le tableau d'amortissement importé si dispo,
+    // sinon la formule d'amortissement français (intérêts dégressifs, annuités constantes)
+    const crd = credits.reduce((s, c) => {
       if (c.schedule?.length) {
         const past = c.schedule.filter(r => r.date <= future);
         return s + (past.length ? Math.max(0, past[past.length-1].capitalRestant) : c.schedule[0]?.capitalRestant || 0);
@@ -1185,13 +1246,47 @@ function _updatePatChart(credits) {
       const k = Math.max(0, (d.getFullYear()-start.getFullYear())*12 + (d.getMonth()-start.getMonth()));
       return s + Math.max(0, _calcCRD(c.montantInitial, c.tauxAnnuel||0, c.dureeMois||0, k));
     }, 0);
-    data.push(Math.round(crd));
+
+    dataCRD.push(Math.round(crd));
+    dataBien.push(hasValeur ? totalValeurBien : null);
+    dataNet.push(hasValeur ? Math.round(Math.max(0, totalValeurBien - crd)) : null);
   }
+
   charts['pat'].data.labels = labels;
-  charts['pat'].data.datasets[0].data = data;
-  charts['pat'].data.datasets[0].label = 'Capital restant dû';
-  charts['pat'].data.datasets[0].borderColor = '#8b2020';
-  charts['pat'].data.datasets[0].backgroundColor = 'rgba(139,32,32,.08)';
+  charts['pat'].data.datasets = [
+    {
+      label: 'Valeur du bien',
+      data: dataBien,
+      borderColor: '#E8A020',
+      backgroundColor: 'transparent',
+      borderDash: [5, 4],
+      fill: false,
+      tension: 0,
+      pointRadius: 0,
+      borderWidth: 1.5,
+    },
+    {
+      label: 'Capital restant dû',
+      data: dataCRD,
+      borderColor: '#8b2020',
+      backgroundColor: 'rgba(139,32,32,.07)',
+      fill: true,
+      tension: .3,
+      pointRadius: 2,
+      borderWidth: 2,
+    },
+    {
+      label: 'Valeur nette immo',
+      data: dataNet,
+      borderColor: '#1a6b4a',
+      backgroundColor: 'rgba(26,107,74,.07)',
+      fill: true,
+      tension: .3,
+      pointRadius: 2,
+      borderWidth: 2,
+    },
+  ];
+  charts['pat'].options.plugins.legend.display = hasValeur;
   charts['pat'].update();
 }
 
@@ -1410,11 +1505,13 @@ function calcBudget() {
   // keep sl-contrib-e in sync with sl-contrib (same person)
   const ce = document.getElementById('sl-contrib-e');
   if (ce) { ce.value = contrib; document.getElementById('sl-contrib-e-out').textContent = contrib.toLocaleString('fr-FR')+' €'; }
+  const revAs = +document.getElementById('sl-rev-as')?.value || 0;
+  const revFoyer = rev + revAs;
   const now = new Date().toISOString().slice(0,7);
   const immoAmt = transactions.filter(t => t.cat === 'immo' && t.date?.slice(0,7) === now && t.amount < 0).reduce((s,t) => s + Math.abs(t.amount), 0);
   const creditAmt = transactions.filter(t => t.cat === 'credit' && t.date?.slice(0,7) === now && t.amount < 0).reduce((s,t) => s + Math.abs(t.amount), 0);
-  const ti = rev > 0 ? (immoAmt/rev*100).toFixed(1) : '0.0';
-  const tt = rev > 0 ? ((immoAmt+creditAmt)/rev*100).toFixed(1) : '0.0';
+  const ti = revFoyer > 0 ? (immoAmt/revFoyer*100).toFixed(1) : '0.0';
+  const tt = revFoyer > 0 ? ((immoAmt+creditAmt)/revFoyer*100).toFixed(1) : '0.0';
   document.getElementById('taux-immo').textContent = ti+' %';
   document.getElementById('taux-total').textContent = tt+' %';
   document.getElementById('pf-immo').style.width = ti+'%';
@@ -1455,7 +1552,10 @@ async function analyzeBudgetAI() {
     const agg = {};
     months.forEach(m => { agg[m] = { revenus: 0, depVar: 0, detail: {} }; });
 
+    const jointAccIds = new Set(accounts.filter(a => a.type === 'joint').map(a => a.id));
+
     transactions.forEach(t => {
+      if (jointAccIds.has(t.account)) return; // exclure les transactions du compte joint
       const m = t.date?.slice(0, 7);
       if (!agg[m]) return;
       if (t.cat === 'salaire' && t.amount > 0) {
@@ -1474,15 +1574,15 @@ async function analyzeBudgetAI() {
       return `${m} | revenus: ${Math.round(agg[m].revenus)}€ | dép. variables: ${Math.round(agg[m].depVar)}€ | ${detail}`;
     }).join('\n');
 
-    const aboTotal   = Math.round(abonnements.reduce((s, a) => s + a.price, 0));
-    const accountsDesc = accounts.map(a => `${a.name} (${a.type})`).join(', ') || 'aucun';
+    const personalAbos = Math.round(abonnements.filter(a => !jointAccIds.has(a.account)).reduce((s, a) => s + a.price, 0));
+    const personalAccounts = accounts.filter(a => a.type !== 'joint').map(a => `${a.name} (${a.type})`).join(', ') || 'aucun';
 
-    const prompt = `Données financières des 6 derniers mois :
+    const prompt = `Données financières des 6 derniers mois (comptes personnels uniquement, hors compte joint) :
 ${rows}
 
-Crédits & abonnements fixes déjà recensés : ${aboTotal}€/mois
-Comptes : ${accountsDesc}
-Transactions importées au total : ${transactions.length}
+Abonnements personnels fixes : ${personalAbos}€/mois
+Comptes analysés : ${personalAccounts}
+Transactions personnelles au total : ${transactions.filter(t => !jointAccIds.has(t.account)).length}
 
 Règles :
 - Exclure les mois avec 0€ de revenus (relevé non importé) du calcul des moyennes.
@@ -1573,7 +1673,7 @@ function calcJoint() {
   // ── Métriques foyer ──
   const foyerRevTotal  = rev + revAs;
   const foyerBudget    = e + as;                                      // contributions des deux
-  const foyerCharges   = chargesJoint > 0 ? chargesJoint : jointAbo; // transactions réelles sinon abonnements déclarés
+  const foyerCharges   = jointAbo > 0 ? jointAbo : chargesJoint; // abonnements déclarés en priorité, sinon transactions réelles
   const foyerMarge     = foyerBudget - foyerCharges;
 
   const _set = (id, txt, color) => {
@@ -1602,8 +1702,9 @@ function calcJoint() {
 
 // ── ÉPARGNE ──
 function calcEpargne() {
-  const aboTotal = abonnements.reduce((s, a) => s + a.price, 0);
-  const cap = (+document.getElementById('sl-rev').value||0) - (+document.getElementById('sl-contrib-e')?.value||0) - CHARGES_PERSO_BOURSO - (+document.getElementById('sl-dv').value||0) - aboTotal;
+  const _jointSet = new Set(accounts.filter(a => a.type === 'joint').map(a => a.id));
+  const personalAbo = abonnements.filter(a => !_jointSet.has(a.account)).reduce((s, a) => s + a.price, 0);
+  const cap = (+document.getElementById('sl-rev').value||0) - (+document.getElementById('sl-contrib-e')?.value||0) - CHARGES_PERSO_BOURSO - (+document.getElementById('sl-dv').value||0) - personalAbo;
   const pp = +document.getElementById('sl-pp').value;
   const pj = +document.getElementById('sl-pj').value;
   const pi = +document.getElementById('sl-pi').value;
@@ -1642,8 +1743,9 @@ function updateSidebar() {
   const contrib = +document.getElementById('sl-contrib-e')?.value||0;
   const dv = +document.getElementById('sl-dv')?.value||0;
   document.getElementById('sf-rev').textContent = 'Revenus : '+rev.toLocaleString('fr-FR')+' €';
-  const aboTotal = abonnements.reduce((s, a) => s + a.price, 0);
-  document.getElementById('sf-disp').textContent = 'Disponible : '+(rev-contrib-CHARGES_PERSO_BOURSO-dv-aboTotal).toLocaleString('fr-FR')+' €';
+  const _jointSet = new Set(accounts.filter(a => a.type === 'joint').map(a => a.id));
+  const personalAbo = abonnements.filter(a => !_jointSet.has(a.account)).reduce((s, a) => s + a.price, 0);
+  document.getElementById('sf-disp').textContent = 'Disponible : '+(rev-contrib-CHARGES_PERSO_BOURSO-dv-personalAbo).toLocaleString('fr-FR')+' €';
 }
 
 // ── CSV PARSER ──
