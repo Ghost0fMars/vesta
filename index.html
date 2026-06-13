@@ -527,6 +527,17 @@
       <div id="bourse-produits"><div style="color:var(--text3);font-size:13px;padding:.5rem 0;text-align:center">Renseignez votre profil pour voir les recommandations.</div></div>
     </div>
     <div id="bourse-tab-placements" style="display:none;padding-top:12px;padding-bottom:1.25rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <span style="font-size:12px;color:var(--text3)">Positions issues de vos relevés de compte-titres</span>
+        <button class="btn btn-sm" style="display:flex;align-items:center;gap:6px" onclick="document.getElementById('bourse-import-input').click()">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6.5 1v8M3.5 6l3 3 3-3"/><path d="M1.5 10.5v.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-.5"/>
+          </svg>
+          Importer relevé
+        </button>
+        <input type="file" id="bourse-import-input" accept=".csv,.txt,.pdf,application/pdf" style="display:none" onchange="importBoursePlacements(this)">
+      </div>
+      <div id="bourse-placements-notif" style="display:none;margin-bottom:10px"></div>
       <div id="bourse-mes-placements"></div>
     </div>
   </div>

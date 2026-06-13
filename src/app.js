@@ -949,11 +949,13 @@ function parsePlacementsCSV(content) {
   };
 }
 
-async function importPlacements(input) {
+async function importPlacements(input, opts = {}) {
   const file = input.files[0];
   if (!file) return;
   input.value = '';
-  const notif = document.getElementById('pat-placements-notif');
+  const notifId  = opts.notifId  || 'pat-placements-notif';
+  const onSuccess = opts.onSuccess || null;
+  const notif = document.getElementById(notifId);
   const show = (ok, msg) => {
     if (!notif) return;
     notif.style.display = 'block';
@@ -973,8 +975,8 @@ async function importPlacements(input) {
       value: parseFloat(h.value) || 0
     })) : [];
 
-    let account = accounts.find(a => 
-      ['epargne', 'invest'].includes(a.type) && 
+    let account = accounts.find(a =>
+      ['epargne', 'invest'].includes(a.type) &&
       (a.name.toLowerCase() === name.toLowerCase() || (a.bank && a.bank.toLowerCase() === bank.toLowerCase() && a.name.toLowerCase().includes(name.toLowerCase())))
     );
 
@@ -996,11 +998,12 @@ async function importPlacements(input) {
       show(true, `✓ Nouveau compte d'investissement "${name}" créé avec ${holdings.length} ligne(s) de titres. Solde : <strong>${fmtE(balance)}</strong>`);
     }
 
-    saveState(); 
+    saveState();
     renderPatrimoine();
     updateAccountDropdowns();
     renderAccounts();
     renderSettingsAccounts();
+    if (onSuccess) onSuccess();
   };
 
   const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
@@ -2430,7 +2433,7 @@ function renderBoursePlacements() {
       });
       html += `</div>`;
     } else {
-      html += `<div style="font-size:11.5px;color:var(--text3);padding-left:10px">Aucun détail de position — <button class="btn btn-sm" onclick="go('patrimoine',document.querySelector('[onclick*=patrimoine]'))" style="font-size:10px">Importer relevé</button></div>`;
+      html += `<div style="font-size:11.5px;color:var(--text3);padding-left:10px">Aucun détail de position</div>`;
     }
 
     html += `</div>`;
@@ -2539,6 +2542,13 @@ function renderBourseProducts(risque, alloc) {
     html += '</div>';
   }
   el.innerHTML = html || '<div style="color:var(--text3);font-size:13px;padding:.5rem 0;text-align:center">Renseignez votre profil pour voir les recommandations.</div>';
+}
+
+function importBoursePlacements(input) {
+  importPlacements(input, {
+    notifId: 'bourse-placements-notif',
+    onSuccess: () => renderBoursePlacements()
+  });
 }
 
 async function refreshBourseProducts() {
