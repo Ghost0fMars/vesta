@@ -336,26 +336,50 @@ textarea { width: 100%; resize: vertical; min-height: 60px; }
 /* JOINT STATS GRID (Budget — 4 colonnes desktop, 2×2 mobile) */
 .joint-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 
-/* MOBILE */
+/* DONUT PAIR (Vue d'ensemble) */
+.donut-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* MOBILE ≤ 768px */
 @media (max-width: 768px) {
   .app { grid-template-columns: 1fr; }
   .sidebar { position: fixed; left: -220px; top: 0; z-index: 100; transition: left .25s; height: 100vh; }
   .sidebar.open { left: 0; }
-  .main { padding: 1rem; }
+  .main { padding: .875rem; }
   .two { grid-template-columns: 1fr; }
   .form-grid, .form-grid.three { grid-template-columns: 1fr; }
-  .mg { grid-template-columns: 1fr 1fr; }
   .tx-grid { overflow-x: auto; }
   .tx-grid-head,
   .tx-grid-row { min-width: 760px; }
   .mobile-toggle { display: flex; align-items: center; gap: 8px; padding: .75rem 1rem; background: var(--surface); border-bottom: 1px solid var(--border); font-size: 13px; font-weight: 500; cursor: pointer; }
-  /* Sliders : label sur sa propre ligne, curseur + valeur en dessous */
+  /* Sliders : label sur sa propre ligne */
   .sl-row { flex-wrap: wrap; gap: 4px 12px; }
   .sl-row label { min-width: unset; width: 100%; }
   .sl-row span { min-width: 56px; }
   /* Grille des stats compte joint : 2×2 sur mobile */
   .joint-stats { grid-template-columns: 1fr 1fr; }
+
+  /* ── Dashboard ── */
+  .mg { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: .875rem; }
+  .metric { padding: 10px 12px; }
+  .metric-value { font-size: 17px; }
+  .metric-label { font-size: 10px; }
+  .metric-delta { font-size: 10px; margin-top: 2px; }
+  .card { padding: .875rem 1rem; }
+  .page-title { font-size: 19px; }
+  /* Nom de compte tronqué si trop long */
+  .account-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+  .account-bal { font-size: 13px; }
 }
+
+/* MOBILE étroit ≤ 400px */
+@media (max-width: 400px) {
+  .main { padding: .625rem; }
+  .metric-value { font-size: 14px; letter-spacing: -.3px; }
+  .metric { padding: 8px 10px; }
+  /* Donuts empilés sur très petit écran */
+  .donut-pair { grid-template-columns: 1fr; gap: 16px; }
+}
+
 @media (min-width: 769px) { .mobile-toggle { display: none; } }
 
 .api-banner { background: var(--blue-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; font-size: 12px; color: var(--blue); margin-bottom: 1rem; display: flex; gap: 10px; align-items: center; }
