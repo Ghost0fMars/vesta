@@ -50,7 +50,7 @@ Vesta est une application de gestion de patrimoine tout-en-un, conçue pour vous
 - Simulateur de projections financières
 
 ### Bourse (IA Multi-Agents)
-- Analyse d'opportunités d'investissement via un pipeline multi-agents :
+- Analyse d'opportunités d'investissement via un pipeline multi-agents basé sur le framework **[TradingAgents](https://arxiv.org/abs/2412.20138)** :
   - Analyste technique (chartisme)
   - Analyste des actualités (sentiment de marché)
   - Analyste des fondamentaux
@@ -177,6 +177,24 @@ Vesta est développée par **àlaclé**, une association loi 1901 basée en Fran
 
 - **Numéro RNA** : W131016315
 - **Contact** : contact@alacle.org
+
+---
+
+## Références académiques
+
+Le modèle d'analyse boursière multi-agents de Vesta s'inspire du framework **TradingAgents** :
+
+```bibtex
+@misc{xiao2025tradingagentsmultiagentsllmfinancial,
+      title={TradingAgents: Multi-Agents LLM Financial Trading Framework}, 
+      author={Yijia Xiao and Edward Sun and Di Luo and Wei Wang},
+      year={2025},
+      eprint={2412.20138},
+      archivePrefix={arXiv},
+      primaryClass={q-fin.TR},
+      url={https://arxiv.org/abs/2412.20138}
+}
+```
 
 ---
 
