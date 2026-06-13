@@ -129,10 +129,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .metric-delta { font-size: 11px; color: var(--text3); margin-top: 3px; }
 
 /* CARDS */
-.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.1rem 1.25rem; margin-bottom: 1rem; box-shadow: var(--shadow); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.1rem 1.25rem; margin-bottom: 1rem; box-shadow: var(--shadow); min-width: 0; overflow: hidden; }
 .card-title { font-size: 12px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.two > * { min-width: 0; }
 .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+.three > * { min-width: 0; }
+.chart-wrap canvas { max-width: 100%; }
 
 /* ROWS */
 .row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
