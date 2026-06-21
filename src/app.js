@@ -288,11 +288,12 @@ function addTx() {
   const note = document.getElementById('tx-note').value.trim();
   if (!date || !label || isNaN(amount)) { alert('Date, libellé et montant requis.'); return; }
   const id = Date.now();
-  transactions.unshift({id,date,label,amount,cat,account,note});
+  transactions.unshift({id,date,label,amount,cat,account,note,manual:true});
   saveState();
   clearTxForm();
   renderTx();
   renderDashRecent(); updateTRBalance(); updateTotalLiquidity();
+  renderAccounts();
   updateSidebar();
 }
 function clearTxForm() {
@@ -304,14 +305,14 @@ function clearTxForm() {
 function deleteTx(id) {
   transactions = transactions.filter(t => t.id !== id);
   saveState();
-  renderTx(); renderDashRecent(); updateTRBalance(); updateTotalLiquidity();
+  renderTx(); renderDashRecent(); updateTRBalance(); updateTotalLiquidity(); renderAccounts();
 }
 function setTxAccount(id, accountId) {
   const t = transactions.find(t => t.id == id);
   if (!t) return;
   t.account = accountId;
   saveState();
-  renderDashRecent(); updateTRBalance(); updateTotalLiquidity();
+  renderDashRecent(); updateTRBalance(); updateTotalLiquidity(); renderAccounts();
 }
 function ensureTxGrid() {
   const currentBody = document.getElementById('tx-tbody');
@@ -365,9 +366,14 @@ function renderTx() {
   const sum = document.getElementById('tx-summary');
   if (sum) sum.textContent = `${filtered.length} transaction(s) · Solde net : ${fmtE(total)}`;
 }
+function effectiveBalance(accountId, baseBalance) {
+  const txSum = transactions.filter(t => t.account === accountId && t.manual === true).reduce((s, t) => s + t.amount, 0);
+  return (baseBalance || 0) + txSum;
+}
+
 function updateTotalLiquidity() {
-  const personal = accounts.filter(a => a.type !== 'joint').reduce((s, a) => s + (a.balance || 0), 0);
-  const joint    = accounts.filter(a => a.type === 'joint').reduce((s, a) => s + (a.balance || 0), 0);
+  const personal = accounts.filter(a => a.type !== 'joint').reduce((s, a) => s + effectiveBalance(a.id, a.balance), 0);
+  const joint    = accounts.filter(a => a.type === 'joint').reduce((s, a) => s + effectiveBalance(a.id, a.balance), 0);
   const elPerso  = document.getElementById('dm-total-liq');
   const elFoyer  = document.getElementById('dm-foyer-liq');
   if (elPerso) elPerso.textContent = fmtE(personal);
@@ -1090,7 +1096,7 @@ function updateCreditField(id, field, value) {
 function renderPatrimoine() {
   // ── Métriques comptes ──
   const finTotal = accounts.filter(a => ['epargne','invest'].includes(a.type)).reduce((s,a) => s + (a.balance||0), 0);
-  const liqTotal = accounts.filter(a => ['courant','joint','pro'].includes(a.type)).reduce((s,a) => s + (a.balance||0), 0);
+  const liqTotal = accounts.filter(a => ['courant','joint','pro'].includes(a.type)).reduce((s,a) => s + effectiveBalance(a.id, a.balance), 0);
 
   // ── Crédits immo ──
   const totalCRD        = creditsImmo.reduce((s,c) => s + getCapitalRestantToday(c), 0);
@@ -1332,7 +1338,7 @@ function renderAccounts() {
     html += `<div class="account-section-label">${bank}</div>`;
     accs.forEach(a => {
       const t = ACCOUNT_TYPES[a.type] || ACCOUNT_TYPES.courant;
-      const bal = a.balance || 0;
+      const bal = effectiveBalance(a.id, a.balance);
       html += `<div class="account-row" onclick="goToAccountTransactions('${a.id}')">
         <div class="account-icon" style="background:var(${t.color})">${t.icon}</div>
         <div class="account-info"><div class="account-name">${a.name}</div><div class="account-num">${a.accountNumber ? '···'+a.accountNumber : t.label}</div></div>
@@ -1383,6 +1389,7 @@ function updateAccountBalance(id) {
   const acc = accounts.find(a => a.id === id);
   if (!acc) return;
   acc.balance = parseFloat(el.value)||0;
+  transactions = transactions.filter(t => !(t.account === id && t.manual === true));
   saveState();
   renderAccounts(); updateTotalLiquidity();
 }
@@ -1397,7 +1404,7 @@ function renderSettingsAccounts() {
       <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
         <span style="font-size:16px">${t.icon}</span>
         <span class="row-label" style="flex:1;min-width:120px">${a.name} <span style="font-size:11px;color:var(--text3)">${a.bank}</span>${a.accountNumber?`<span style="font-size:10px;color:var(--text3);margin-left:4px">···${a.accountNumber}</span>`:''}</span>
-        <input type="number" id="bal-${a.id}" value="${a.balance||0}" step="0.01" style="width:110px;font-family:var(--mono)" onchange="updateAccountBalance('${a.id}')">
+        <input type="number" id="bal-${a.id}" value="${effectiveBalance(a.id, a.balance).toFixed(2)}" step="0.01" style="width:110px;font-family:var(--mono)" onchange="updateAccountBalance('${a.id}')">
         <span style="font-size:11px;color:var(--text3)">€</span>
         <button class="btn btn-sm" onclick="editAccount('${a.id}')" title="Modifier">✎</button>
         <button class="btn btn-sm" style="color:var(--red)" onclick="deleteAccount('${a.id}')">✕</button>
@@ -1432,7 +1439,7 @@ function editAccount(id) {
       <div class="form-grid three" style="margin:0">
         <div class="form-group" style="margin:0">
           <label class="form-label">Solde (€)</label>
-          <input type="number" id="edit-bal-${id}" value="${a.balance||0}" step="0.01">
+          <input type="number" id="edit-bal-${id}" value="${effectiveBalance(a.id, a.balance).toFixed(2)}" step="0.01">
         </div>
         <div class="form-group" style="margin:0">
           <label class="form-label">N° compte</label>
@@ -1454,6 +1461,7 @@ function saveAccountEdit(id) {
   a.type          = document.getElementById(`edit-type-${id}`)?.value || a.type;
   a.balance       = parseFloat(document.getElementById(`edit-bal-${id}`)?.value) || 0;
   a.accountNumber = document.getElementById(`edit-num-${id}`)?.value.trim() || '';
+  transactions = transactions.filter(t => !(t.account === id && t.manual === true));
   saveState();
   renderAccounts();
   renderSettingsAccounts();
