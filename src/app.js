@@ -1125,16 +1125,18 @@ function renderPatrimoine() {
           if (a.holdings && a.holdings.length > 0) {
             holdingsHtml = `
               <div class="account-holdings" style="margin-top: 8px; margin-bottom: 4px; padding-left: 12px; border-left: 2px solid var(--border2); font-size: 11.5px; display: flex; flex-direction: column; gap: 6px;">
-                ${a.holdings.map(h => `
-                  <div style="display:flex; justify-content:space-between; align-items:center; color:var(--text2)">
+                ${a.holdings.map(h => {
+                  const at = (h.ticker && h.ticker !== '—' ? h.ticker : h.name).replace(/'/g, "\\'");
+                  return `
+                  <div style="display:flex; justify-content:space-between; align-items:center; color:var(--text2); cursor:pointer; border-radius:4px; padding:2px 4px; margin:-2px -4px; transition:background .12s" title="Analyser avec le comité IA" onclick="analyseWithAgents('${at}')" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''">
                     <span style="font-weight: 400; line-height: 1.3;">
                       ${h.name}
                       ${h.ticker ? `<span style="font-family:var(--mono); color:var(--text3); font-size:10px; margin-left: 4px;">(${h.ticker})</span>` : ''}
                       ${h.quantity ? `<br><span style="color:var(--text3); font-size:10.5px;">${h.quantity} part${h.quantity > 1 ? 's' : ''} · ${fmtE(h.price || 0)}</span>` : ''}
                     </span>
                     <span style="font-family:var(--mono); font-weight:500; color:var(--text);">${fmtE(h.value || 0)}</span>
-                  </div>
-                `).join('')}
+                  </div>`;
+                }).join('')}
               </div>
             `;
           }
@@ -2229,6 +2231,89 @@ function resetAppData() {
 }
 
 // ── CONSEILLER IA ──
+function buildFinancialContext() {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const currentMonth = today.slice(0, 7);
+  const parts = [];
+
+  parts.push(`=== SITUATION FINANCIÈRE AU ${today} ===`);
+
+  // 1. Comptes et liquidités
+  if (accounts.length > 0) {
+    const totalLiquidity = accounts.reduce((s, a) => s + (a.balance || 0), 0);
+    const accountLines = accounts.map(a =>
+      `  - ${a.name}${a.bank ? ' (' + a.bank + ')' : ''} [${ACCOUNT_TYPES[a.type]?.label || a.type}]: ${fmtE(a.balance || 0)}`
+    ).join('\n');
+    parts.push(`\nCOMPTES — total liquidités : ${fmtE(totalLiquidity)}\n${accountLines}`);
+  }
+
+  // 2. Mois en cours
+  const thisMonthTx = transactions.filter(t => t.date?.startsWith(currentMonth));
+  if (thisMonthTx.length > 0) {
+    const income   = thisMonthTx.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+    const expenses = thisMonthTx.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+    parts.push(`\nMOIS EN COURS (${currentMonth}): revenus ${Math.round(income)} € | dépenses ${Math.round(expenses)} €`);
+  }
+
+  // 3. Historique 3 derniers mois par catégorie
+  const threeMonthsAgo = new Date(now);
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  const threeMonthsAgoStr = threeMonthsAgo.toISOString().slice(0, 10);
+  const recentTx = transactions.filter(t => t.date > threeMonthsAgoStr && !t.date?.startsWith(currentMonth));
+  if (recentTx.length > 0) {
+    const byMonth = {};
+    recentTx.forEach(t => {
+      const m = t.date.slice(0, 7);
+      if (!byMonth[m]) byMonth[m] = { revenus: 0, depenses: {}, total: 0 };
+      if (t.amount > 0) {
+        byMonth[m].revenus += t.amount;
+      } else {
+        const c = t.cat || 'divers';
+        byMonth[m].depenses[c] = (byMonth[m].depenses[c] || 0) + Math.abs(t.amount);
+        byMonth[m].total += Math.abs(t.amount);
+      }
+    });
+    const monthLines = Object.keys(byMonth).sort().map(m => {
+      const d = byMonth[m];
+      const top = Object.entries(d.depenses).sort((a, b) => b[1] - a[1]).slice(0, 5)
+        .map(([c, v]) => `${CAT_LABELS[c] || c}: ${Math.round(v)}€`).join(', ');
+      return `  ${m}: revenus ${Math.round(d.revenus)}€ | dépenses ${Math.round(d.total)}€ [${top}]`;
+    }).join('\n');
+    parts.push(`\nHISTORIQUE 3 MOIS:\n${monthLines}`);
+  }
+
+  // 4. Charges fixes (abonnements)
+  if (abonnements.length > 0) {
+    const totalAbo = abonnements.reduce((s, a) => s + a.price, 0);
+    const aboLines = abonnements.map(a =>
+      `  - ${a.name}: ${a.price}€/mois${a.keep === false ? ' [à résilier]' : ''}`
+    ).join('\n');
+    parts.push(`\nCHARGES FIXES MENSUELLES (total: ${Math.round(totalAbo)}€/mois):\n${aboLines}`);
+  }
+
+  // 5. Crédits immobiliers
+  if (creditsImmo.length > 0) {
+    const creditLines = creditsImmo.map(c => {
+      const crd = getCapitalRestantToday(c);
+      const start = c.dateDebut || c.datDebut || '';
+      const elapsed = start ? Math.max(0, Math.floor((now - new Date(start)) / (1000 * 60 * 60 * 24 * 30.44))) : 0;
+      const remaining = Math.max(0, (c.dureeMois || 0) - elapsed);
+      return `  - ${c.name}: ${Math.round(c.mensualite || 0)}€/mois | capital restant ~${Math.round(crd)}€ | ${remaining} mois restants`;
+    }).join('\n');
+    parts.push(`\nCRÉDITS IMMOBILIERS:\n${creditLines}`);
+  }
+
+  // 6. Dépenses anticipées mois prochain
+  const fixedNextMonth = abonnements.reduce((s, a) => s + a.price, 0)
+    + creditsImmo.reduce((s, c) => s + (c.mensualite || 0), 0);
+  if (fixedNextMonth > 0) {
+    parts.push(`\nDÉPENSES FIXES ANTICIPÉES (mois prochain): ~${Math.round(fixedNextMonth)}€`);
+  }
+
+  return parts.join('\n');
+}
+
 async function callAI(messages) {
   const provider = settings.aiProvider || 'openai';
   const key = settings.aiApiKey || '';
@@ -2292,7 +2377,9 @@ async function sendChat() {
   const el = addChatMsg('…','ai loading');
   chatHistory.push({role:'user',content:msg});
   try {
-    const txt = await callAI([{role:'system',content:SYSTEM}, ...chatHistory]);
+    const ctx = buildFinancialContext();
+    const systemWithCtx = SYSTEM + '\n\n' + ctx;
+    const txt = await callAI([{role:'system',content:systemWithCtx}, ...chatHistory]);
     el.classList.remove('loading'); el.textContent = txt;
     chatHistory.push({role:'assistant', content:txt});
     if (chatHistory.length > 24) chatHistory = chatHistory.slice(-24);
@@ -2430,7 +2517,8 @@ function renderBoursePlacements() {
       html += `<div style="display:flex;flex-direction:column;gap:5px;padding-left:10px;border-left:2px solid var(--border2)">`;
       a.holdings.forEach(h => {
         const hPct = holdTotal > 0 ? (h.value / holdTotal * 100).toFixed(1) : '0.0';
-        html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px">
+        const analyseTarget = (h.ticker && h.ticker !== '—' ? h.ticker : h.name).replace(/'/g, "\\'");
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;cursor:pointer;border-radius:4px;padding:2px 4px;margin:-2px -4px;transition:background .12s" title="Analyser avec le comité IA" onclick="analyseWithAgents('${analyseTarget}')" onmouseover="this.style.background='var(--border)'" onmouseout="this.style.background=''">
           <span style="color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:8px">
             ${h.name}${h.ticker ? ` <span style="font-family:var(--mono);color:var(--text3);font-size:10px">${h.ticker}</span>` : ''}
             ${h.quantity ? `<br><span style="color:var(--text3);font-size:10.5px">${h.quantity} part${h.quantity > 1 ? 's' : ''} · ${fmtE(h.price||0)}</span>` : ''}
@@ -2448,6 +2536,20 @@ function renderBoursePlacements() {
   });
 
   el.innerHTML = html;
+}
+
+function analyseWithAgents(ticker) {
+  go('bourse', document.querySelector('[onclick*=bourse]'));
+  setTimeout(() => {
+    const inp = document.getElementById('agent-ticker');
+    if (!inp) return;
+    inp.value = ticker;
+    inp.focus();
+    inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    inp.style.transition = 'box-shadow .15s';
+    inp.style.boxShadow = '0 0 0 2px var(--blue)';
+    setTimeout(() => { inp.style.boxShadow = ''; }, 1200);
+  }, 120);
 }
 
 function getBourseContext() {
