@@ -64,7 +64,7 @@ CREATE TABLE transactions (
                             CHECK (category IN (
                                 'salaire','immo','credit','alimentation','restaurant',
                                 'sante','transport','loisirs','vetements','voyage',
-                                'travaux','abonnement','epargne','divers'
+                                'travaux','abonnement','epargne','impots','divers'
                             )),
     note        TEXT,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -89,7 +89,7 @@ CREATE TABLE abonnements (
                             CHECK (category IN (
                                 'salaire','immo','credit','alimentation','restaurant',
                                 'sante','transport','loisirs','vetements','voyage',
-                                'travaux','abonnement','epargne','divers'
+                                'travaux','abonnement','epargne','impots','divers'
                             )),
     keep        BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -157,7 +157,7 @@ CREATE TABLE budgets (
                             CHECK (category IN (
                                 'salaire','immo','credit','alimentation','restaurant',
                                 'sante','transport','loisirs','vetements','voyage',
-                                'travaux','abonnement','epargne','divers'
+                                'travaux','abonnement','epargne','impots','divers'
                             )),
     amount      NUMERIC(10,2) NOT NULL DEFAULT 0,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),

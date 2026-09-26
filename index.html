@@ -20,7 +20,7 @@
 <script src="/src/firebase.js"></script>
 <link rel="stylesheet" href="/src/styles.css?v=accounts-1">
 <script src="/src/auth.js" defer></script>
-<script src="/src/app.js?v=accounts-1" defer></script>
+<script src="/src/app.js?v=owners-1" defer></script>
 <script src="/src/agents.js?v=agents-1" defer></script>
 </head>
 <body>
@@ -145,6 +145,11 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-title">Répartition par titulaire <select id="os-month" onchange="renderOwnerSplit()" aria-label="Mois"></select></div>
+    <div id="owner-split"></div>
+  </div>
+
   <div class="two">
     <div class="card">
       <div class="card-title">Flux mensuels</div>
@@ -222,6 +227,7 @@
           <option value="travaux">Travaux / maison</option>
           <option value="abonnement">Abonnements</option>
           <option value="epargne">Épargne / virement</option>
+          <option value="impots">Impôts</option>
           <option value="divers">Divers</option>
         </select>
       </div>
@@ -254,6 +260,10 @@
       <option value="travaux">Travaux</option>
       <option value="sante">Santé</option>
       <option value="epargne">Épargne</option>
+      <option value="impots">Impôts</option>
+      <option value="immo">Crédit immobilier</option>
+      <option value="credit">Crédit / assurances</option>
+      <option value="divers">Divers</option>
     </select>
     <select id="tx-filter-type" onchange="renderTx()">
       <option value="">Tout</option>
@@ -305,7 +315,7 @@
   <div class="two">
     <div class="card">
       <div class="card-title">Mes paramètres</div>
-      <div class="sl-row"><label>Mes revenus nets (€)</label><input type="range" min="0" max="10000" step="50" value="0" id="sl-rev" oninput="calcBudget()"><span id="sl-rev-out">0 €</span></div>
+      <div class="sl-row"><label>Mes revenus nets (€)</label><input type="range" min="0" max="10000" step="10" value="0" id="sl-rev" oninput="calcBudget()"><span id="sl-rev-out">0 €</span></div>
       <div class="sl-row"><label>Contribution compte joint (€)</label><input type="range" min="0" max="5000" step="50" value="0" id="sl-contrib" oninput="calcBudget()"><span id="sl-contrib-out">0 €</span></div>
       <div class="sl-row"><label>Dépenses variables perso (€)</label><input type="range" min="0" max="2000" step="50" value="0" id="sl-dv" oninput="calcBudget()"><span id="sl-dv-out">0 €</span></div>
     </div>
@@ -319,13 +329,13 @@
     <div class="card-title">Contributions compte joint</div>
     <div class="two" style="gap:12px;margin-bottom:0">
       <div>
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:8px">Moi</div>
+        <div id="lbl-moi" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:8px">Moi</div>
         <div class="sl-row" style="margin-bottom:0"><label>Versement mensuel (€)</label><input type="range" min="0" max="5000" step="50" value="0" id="sl-contrib-e" oninput="calcJoint()"><span id="sl-contrib-e-out">0 €</span></div>
       </div>
       <div>
-        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:8px">Partenaire</div>
-        <div class="sl-row" style="margin-bottom:8px"><label>Revenus mensuels nets (€)</label><input type="range" min="0" max="15000" step="100" value="0" id="sl-rev-as" oninput="calcJoint()"><span id="sl-rev-as-out">0 €</span></div>
-        <div class="sl-row" style="margin-bottom:0"><label>Versement compte joint (€)</label><input type="range" min="0" max="10000" step="100" value="0" id="sl-contrib-as" oninput="calcJoint()"><span id="sl-contrib-as-out">0 €</span></div>
+        <div id="lbl-partenaire" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:8px">Partenaire</div>
+        <div class="sl-row" style="margin-bottom:8px"><label>Revenus mensuels nets (€)</label><input type="range" min="0" max="15000" step="10" value="0" id="sl-rev-as" oninput="calcJoint()"><span id="sl-rev-as-out">0 €</span></div>
+        <div class="sl-row" style="margin-bottom:0"><label>Versement compte joint (€)</label><input type="range" min="0" max="10000" step="10" value="0" id="sl-contrib-as" oninput="calcJoint()"><span id="sl-contrib-as-out">0 €</span></div>
       </div>
     </div>
     <div class="joint-stats" style="margin-top:16px;text-align:center">
@@ -355,6 +365,11 @@
         <div class="metric"><div class="metric-label">Marge foyer</div><div class="metric-value" id="foyer-marge">— €</div><div class="metric-delta">budget - charges</div></div>
       </div>
     </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Suivi du compte joint <select id="jt-month" onchange="renderJointTracking()" aria-label="Mois"></select></div>
+    <div id="joint-tracking"></div>
   </div>
 
   <div class="card">
@@ -728,6 +743,23 @@
       <label class="form-label">Prénom affiché dans l'app</label>
       <input type="text" id="set-display-name" placeholder="Ex: Marie, Jean-Pierre..." autocomplete="given-name" style="max-width:280px">
     </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Prénom du / de la partenaire</label>
+      <input type="text" id="set-partner-name" placeholder="Ex: Camille" style="max-width:280px">
+    </div>
+    <div class="form-grid" style="margin-bottom:6px">
+      <div class="form-group">
+        <label class="form-label">Mes virements vers le compte joint contiennent</label>
+        <input type="text" id="set-kw-moi" placeholder="Ex: DUPONT, JEAN (séparés par des virgules)">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ses virements vers le compte joint contiennent</label>
+        <input type="text" id="set-kw-partenaire" placeholder="Ex: MARTIN, CAMILLE">
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">
+      Ces mots-clés, recherchés dans le libellé, servent à attribuer chaque versement reçu sur le compte joint. À défaut, le prénom est utilisé.
+    </div>
     <button class="btn btn-primary" onclick="saveSettings()">Enregistrer</button>
   </div>
 
@@ -767,6 +799,14 @@
       <div class="form-group">
         <label class="form-label">N° compte (4 derniers chiffres)</label>
         <input type="text" id="acc-number" placeholder="Ex: 1234" maxlength="10">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Titulaire</label>
+        <select id="acc-owner">
+          <option value="moi">Moi</option>
+          <option value="partenaire">Partenaire</option>
+          <option value="commun">Commun</option>
+        </select>
       </div>
     </div>
     <button class="btn btn-primary" onclick="addAccount()">Ajouter le compte</button>

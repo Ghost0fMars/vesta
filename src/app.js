@@ -7,18 +7,18 @@ const CAT_COLORS = {
   salaire:'#1a6b4a', immo:'#8b2020', credit:'#c0392b', alimentation:'#7a4f0d',
   restaurant:'#d4880a', sante:'#1a4a7a', transport:'#2c6e49', loisirs:'#4a3080',
   vetements:'#8a3a8a', voyage:'#1a6b6b', travaux:'#6b4a1a', abonnement:'#3a6b8a',
-  epargne:'#2a5a3a', divers:'#6b6860'
+  epargne:'#2a5a3a', impots:'#5a4a6b', divers:'#6b6860'
 };
 const CAT_ICONS = {
   salaire:'€', immo:'🏠', credit:'🔒', alimentation:'🛒', restaurant:'🍽',
   sante:'💊', transport:'🚗', loisirs:'🎭', vetements:'👗', voyage:'✈',
-  travaux:'🔧', abonnement:'📱', epargne:'💰', divers:'•'
+  travaux:'🔧', abonnement:'📱', epargne:'💰', impots:'🏛', divers:'•'
 };
 const CAT_LABELS = {
   salaire:'Salaire', immo:'Crédit immo', credit:'Crédit/Assur.', alimentation:'Alimentation',
   restaurant:'Restaurant', sante:'Santé', transport:'Transport', loisirs:'Loisirs',
   vetements:'Vêtements', voyage:'Voyage', travaux:'Travaux', abonnement:'Abonnement',
-  epargne:'Épargne', divers:'Divers'
+  epargne:'Épargne', impots:'Impôts', divers:'Divers'
 };
 const ACCOUNT_TYPES = {
   courant: { label:'Compte courant', icon:'🏦', color:'--blue-bg' },
@@ -27,6 +27,21 @@ const ACCOUNT_TYPES = {
   pro:     { label:'Compte pro',      icon:'💼', color:'--purple-bg' },
   invest:  { label:'Investissement',  icon:'📊', color:'--purple-bg' },
 };
+
+// Titulaire d'un compte : moi, partenaire ou commun (compte joint)
+const OWNERS = ['moi', 'partenaire', 'commun'];
+function ownerLabel(o) {
+  if (o === 'commun') return 'Commun';
+  if (o === 'partenaire') return settings.partnerName || 'Partenaire';
+  return settings.displayName || 'Moi';
+}
+function accountOwner(a) { return a?.owner || (a?.type === 'joint' ? 'commun' : 'moi'); }
+function ownerOptions(selected) {
+  return OWNERS.map(o => `<option value="${o}"${o === selected ? ' selected' : ''}>${_esc(ownerLabel(o))}</option>`).join('');
+}
+function _esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
 function getAccountLabel(id) {
   const a = accounts.find(a => a.id === id);
@@ -37,7 +52,8 @@ let transactions = [];
 let abonnements  = [];
 let accounts     = [];
 const _env = (typeof window !== 'undefined' && window.__ENV__) || {};
-let settings     = { aiProvider:'openai', aiApiKey:_env.OPENAI_API_KEY||'', displayName:'' };
+let settings     = { aiProvider:'openai', aiApiKey:_env.OPENAI_API_KEY||'', displayName:'', partnerName:'',
+                     contribKeywords:{ moi:'', partenaire:'' } };
 let budget       = {};
 let creditsImmo  = [];
 
@@ -76,7 +92,8 @@ function go(id, el) {
   if (id === 'transactions') renderTx();
   if (id === 'abonnements')  renderAbo();
   if (id === 'patrimoine')   renderPatrimoine();
-  if (id === 'dashboard')    { renderDashAbo(); calcJoint(); }
+  if (id === 'dashboard')    { renderDashAbo(); calcJoint(); renderOwnerSplit(); }
+  if (id === 'budget')       calcJoint();
   if (id === 'settings')     { renderSettingsAccounts(); loadSettingsUI(); }
   if (id === 'epargne') { calcEpargne(); setTimeout(initTRChart, 100); }
   if (id === 'bourse') { calcBourseProfil(); if (typeof restoreAgentAnalysis === 'function') restoreAgentAnalysis(); if (document.getElementById('bourse-tab-placements')?.style.display !== 'none') renderBoursePlacements(); }
@@ -171,7 +188,7 @@ function buildFluxData() {
 }
 
 function buildVarData() {
-  const FIXED = new Set(['salaire','immo','credit','abonnement','epargne']);
+  const FIXED = new Set(['salaire','immo','credit','abonnement','epargne','impots']);
   const VAR_CATS = [
     {key:'alimentation', label:'Alimentation'},
     {key:'restaurant',   label:'Restaurants'},
@@ -1343,7 +1360,7 @@ function renderAccounts() {
       const bal = effectiveBalance(a.id, a.balance);
       html += `<div class="account-row" onclick="goToAccountTransactions('${a.id}')">
         <div class="account-icon" style="background:var(${t.color})">${t.icon}</div>
-        <div class="account-info"><div class="account-name">${a.name}</div><div class="account-num">${a.accountNumber ? '···'+a.accountNumber : t.label}</div></div>
+        <div class="account-info"><div class="account-name">${a.name}</div><div class="account-num">${_esc(ownerLabel(accountOwner(a)))} · ${a.accountNumber ? '···'+a.accountNumber : t.label}</div></div>
         <div class="account-bal ${bal>0?'pos':bal<0?'neg':'neu'}">${fmtE(bal)}</div>
         <div class="account-arrow">›</div>
       </div>`;
@@ -1370,10 +1387,11 @@ function addAccount() {
   const type  = document.getElementById('acc-type').value;
   const bal   = parseFloat(document.getElementById('acc-balance').value)||0;
   const num   = document.getElementById('acc-number').value.trim();
+  const owner = document.getElementById('acc-owner')?.value || (type === 'joint' ? 'commun' : 'moi');
   if (!name || !bank) { alert('Nom et banque requis.'); return; }
-  accounts.push({ id:'acc_'+Date.now(), name, bank, type, balance:bal, accountNumber:num });
+  accounts.push({ id:'acc_'+Date.now(), name, bank, type, owner, balance:bal, accountNumber:num });
   saveState();
-  renderAccounts(); renderSettingsAccounts(); updateAccountDropdowns();
+  renderAccounts(); renderSettingsAccounts(); updateAccountDropdowns(); renderOwnerSplit();
   ['acc-name','acc-bank','acc-number'].forEach(id => { const e = document.getElementById(id); if(e) e.value=''; });
   document.getElementById('acc-balance').value = '0';
 }
@@ -1405,7 +1423,7 @@ function renderSettingsAccounts() {
     return `<div class="acc-settings-row" id="acc-row-${a.id}">
       <div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
         <span style="font-size:16px">${t.icon}</span>
-        <span class="row-label" style="flex:1;min-width:120px">${a.name} <span style="font-size:11px;color:var(--text3)">${a.bank}</span>${a.accountNumber?`<span style="font-size:10px;color:var(--text3);margin-left:4px">···${a.accountNumber}</span>`:''}</span>
+        <span class="row-label" style="flex:1;min-width:120px">${a.name} <span style="font-size:11px;color:var(--text3)">${a.bank} · ${_esc(ownerLabel(accountOwner(a)))}</span>${a.accountNumber?`<span style="font-size:10px;color:var(--text3);margin-left:4px">···${a.accountNumber}</span>`:''}</span>
         <input type="number" id="bal-${a.id}" value="${effectiveBalance(a.id, a.balance).toFixed(2)}" step="0.01" style="width:110px;font-family:var(--mono)" onchange="updateAccountBalance('${a.id}')">
         <span style="font-size:11px;color:var(--text3)">€</span>
         <button class="btn btn-sm" onclick="editAccount('${a.id}')" title="Modifier">✎</button>
@@ -1447,6 +1465,10 @@ function editAccount(id) {
           <label class="form-label">N° compte</label>
           <input type="text" id="edit-num-${id}" value="${a.accountNumber||''}" placeholder="4 derniers chiffres" maxlength="10">
         </div>
+        <div class="form-group" style="margin:0">
+          <label class="form-label">Titulaire</label>
+          <select id="edit-owner-${id}">${ownerOptions(accountOwner(a))}</select>
+        </div>
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-primary btn-sm" onclick="saveAccountEdit('${id}')">Enregistrer</button>
@@ -1463,11 +1485,14 @@ function saveAccountEdit(id) {
   a.type          = document.getElementById(`edit-type-${id}`)?.value || a.type;
   a.balance       = parseFloat(document.getElementById(`edit-bal-${id}`)?.value) || 0;
   a.accountNumber = document.getElementById(`edit-num-${id}`)?.value.trim() || '';
+  a.owner         = document.getElementById(`edit-owner-${id}`)?.value || accountOwner(a);
   transactions = transactions.filter(t => !(t.account === id && t.manual === true));
   saveState();
   renderAccounts();
   renderSettingsAccounts();
   updateAccountDropdowns();
+  renderOwnerSplit();
+  calcJoint();
   showSyncBadge('Compte mis à jour');
 }
 
@@ -1477,22 +1502,40 @@ function updateDisplayName() {
   if (!nameEl) return;
   const user = window.fbAuth?.currentUser;
   nameEl.textContent = settings.displayName || user?.email?.split('@')[0] || 'Profil';
+  const lm = document.getElementById('lbl-moi');
+  const lp = document.getElementById('lbl-partenaire');
+  if (lm) lm.textContent = ownerLabel('moi');
+  if (lp) lp.textContent = ownerLabel('partenaire');
+  const ao = document.getElementById('acc-owner');
+  if (ao) ao.innerHTML = ownerOptions(ao.value || 'moi');
 }
 
 function saveSettings() {
   settings.displayName = document.getElementById('set-display-name')?.value.trim() || '';
+  settings.partnerName = document.getElementById('set-partner-name')?.value.trim() || '';
+  settings.contribKeywords = {
+    moi:        document.getElementById('set-kw-moi')?.value.trim() || '',
+    partenaire: document.getElementById('set-kw-partenaire')?.value.trim() || '',
+  };
   settings.aiProvider  = document.getElementById('set-provider')?.value || 'openai';
   settings.aiApiKey    = document.getElementById('set-api-key')?.value.trim() || '';
   saveState();
   updateDisplayName();
+  renderAccounts(); renderSettingsAccounts(); renderOwnerSplit(); calcJoint();
   showSyncBadge('Paramètres enregistrés');
 }
 
 function loadSettingsUI() {
   const dn = document.getElementById('set-display-name');
+  const pn = document.getElementById('set-partner-name');
+  const km = document.getElementById('set-kw-moi');
+  const kp = document.getElementById('set-kw-partenaire');
   const p  = document.getElementById('set-provider');
   const k  = document.getElementById('set-api-key');
   if (dn) dn.value = settings.displayName || '';
+  if (pn) pn.value = settings.partnerName || '';
+  if (km) km.value = settings.contribKeywords?.moi || '';
+  if (kp) kp.value = settings.contribKeywords?.partenaire || '';
   if (p)  p.value  = settings.aiProvider  || 'openai';
   if (k)  k.value  = settings.aiApiKey    || '';
 }
@@ -1734,7 +1777,154 @@ function calcJoint() {
   _set('dm-foyer-marge',   (foyerMarge >= 0 ? '+' : '') + fmtE(foyerMarge),
        foyerMarge >= 0 ? 'var(--green)' : 'var(--red)');
 
+  renderJointTracking();
   updateSidebar();
+}
+
+// ── TITULAIRES & SUIVI DU COMPTE JOINT ──
+function _txMonths() {
+  return [...new Set(transactions.map(t => t.date?.slice(0,7)).filter(Boolean))].sort().reverse();
+}
+
+function _fmtMonth(m) {
+  const [y, mo] = m.split('-').map(Number);
+  return new Date(y, mo - 1, 1).toLocaleDateString('fr-FR', { month:'long', year:'numeric' });
+}
+
+// Remplit un <select> de mois ; garde la sélection, sinon mois courant (ou dernier mois avec données)
+function _fillMonthSelect(id) {
+  const sel = document.getElementById(id);
+  if (!sel) return new Date().toISOString().slice(0,7);
+  const now = new Date().toISOString().slice(0,7);
+  const months = _txMonths();
+  if (!months.includes(now)) months.unshift(now);
+  months.sort().reverse();
+  const current = sel.value && months.includes(sel.value) ? sel.value
+                : (transactions.some(t => t.date?.startsWith(now)) ? now : (months.find(m => m !== now) || now));
+  sel.innerHTML = months.map(m => `<option value="${m}"${m === current ? ' selected' : ''}>${_fmtMonth(m)}</option>`).join('');
+  return current;
+}
+
+function renderOwnerSplit() {
+  const el = document.getElementById('owner-split');
+  if (!el) return;
+  if (!accounts.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:.5rem 0">Ajoutez vos comptes et indiquez leur titulaire dans les Paramètres.</div>';
+    return;
+  }
+  const month = _fillMonthSelect('os-month');
+  const ownerOf = {};
+  accounts.forEach(a => { ownerOf[a.id] = accountOwner(a); });
+  const rows = OWNERS.map(o => {
+    const accs = accounts.filter(a => accountOwner(a) === o);
+    const bal  = accs.reduce((s, a) => s + effectiveBalance(a.id, a.balance), 0);
+    const tx   = transactions.filter(t => ownerOf[t.account] === o && t.date?.startsWith(month) && t.cat !== 'epargne');
+    const inc  = tx.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+    const out  = tx.filter(t => t.amount < 0).reduce((s, t) => s + Math.abs(t.amount), 0);
+    return { o, n: accs.length, bal, inc, out, net: inc - out };
+  }).filter(r => r.n > 0);
+  const tot = rows.reduce((s, r) => ({ bal: s.bal + r.bal, inc: s.inc + r.inc, out: s.out + r.out, net: s.net + r.net }),
+                          { bal: 0, inc: 0, out: 0, net: 0 });
+  const col = v => v >= 0 ? 'var(--green)' : 'var(--red)';
+  el.innerHTML = `
+    <div class="table-scroll"><table class="split-table">
+      <thead><tr><th>Titulaire</th><th>Comptes</th><th>Solde</th><th>Entrées du mois</th><th>Sorties du mois</th><th>Net du mois</th></tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td>${_esc(ownerLabel(r.o))}</td><td>${r.n}</td><td>${fmtE(r.bal)}</td>
+          <td style="color:var(--green)">${fmtE(r.inc)}</td><td style="color:var(--red)">${fmtE(r.out)}</td>
+          <td style="color:${col(r.net)}">${fmtE(r.net)}</td></tr>`).join('')}
+        <tr class="split-total"><td>Total foyer</td><td></td><td>${fmtE(tot.bal)}</td><td>${fmtE(tot.inc)}</td><td>${fmtE(tot.out)}</td>
+          <td style="color:${col(tot.net)}">${fmtE(tot.net)}</td></tr>
+      </tbody>
+    </table></div>
+    <div style="font-size:11px;color:var(--text3);margin-top:8px">Hors catégorie Épargne / virement (versements sur livrets et virements entre vos comptes, dont les versements au compte joint).</div>`;
+}
+
+// Attribue un virement reçu sur le compte joint à « moi » ou « partenaire » via les mots-clés des Paramètres
+function _contribOwner(t) {
+  const label = (t.label || '').toUpperCase();
+  for (const o of ['moi', 'partenaire']) {
+    const kw = (settings.contribKeywords?.[o] || ownerLabel(o)).split(',').map(k => k.trim().toUpperCase()).filter(Boolean);
+    if (kw.some(k => label.includes(k))) return o;
+  }
+  return 'autre';
+}
+
+function _jointMonthStats(month, jointIds) {
+  const tx = transactions.filter(t => jointIds.has(t.account) && t.date?.startsWith(month));
+  const s = { moi: 0, partenaire: 0, autre: 0, charges: 0 };
+  tx.forEach(t => {
+    if (t.amount > 0) s[_contribOwner(t)] += t.amount;
+    else s.charges += Math.abs(t.amount);
+  });
+  return s;
+}
+
+function renderJointTracking() {
+  const el = document.getElementById('joint-tracking');
+  if (!el) return;
+  // Comptes de fonctionnement communs uniquement (un livret commun ne sert pas à payer les prélèvements)
+  const jointAccs = accounts.filter(a => accountOwner(a) === 'commun' && (a.type === 'joint' || a.type === 'courant'));
+  if (!jointAccs.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:.5rem 0">Aucun compte commun. Dans les Paramètres, choisissez le titulaire « Commun » pour votre compte joint.</div>';
+    return;
+  }
+  const jointIds = new Set(jointAccs.map(a => a.id));
+  const month    = _fillMonthSelect('jt-month');
+  const s        = _jointMonthStats(month, jointIds);
+  const target   = { moi: +document.getElementById('sl-contrib-e')?.value || 0,
+                     partenaire: +document.getElementById('sl-contrib-as')?.value || 0 };
+  const balance  = jointAccs.reduce((sum, a) => sum + effectiveBalance(a.id, a.balance), 0);
+  const fixed    = abonnements.filter(a => jointIds.has(a.account)).reduce((sum, a) => sum + a.price, 0);
+  const need     = Math.max(0, fixed - balance);
+  const tTot     = target.moi + target.partenaire;
+  const shareMoi = tTot > 0 ? target.moi / tTot : 0.5;
+  const needMoi  = Math.round(need * shareMoi * 100) / 100;
+  const needPart = Math.round((need - needMoi) * 100) / 100;
+
+  const bar = o => {
+    const pct = target[o] > 0 ? Math.min(100, s[o] / target[o] * 100) : 0;
+    const done = target[o] > 0 && s[o] >= target[o];
+    return `<div style="margin-bottom:10px">
+      <div class="row" style="border:none;padding:0">
+        <span class="row-label">${_esc(ownerLabel(o))}</span>
+        <span class="row-value">${fmtE(s[o])} <span style="color:var(--text3);font-weight:400">/ ${target[o] ? fmtE(target[o]) : 'cible non définie'}</span></span>
+      </div>
+      <div class="pbar"><div class="pfill" style="width:${pct}%;background:${done ? 'var(--green)' : 'var(--amber)'}"></div></div>
+    </div>`;
+  };
+
+  const hist = _txMonths().filter(m => m <= month).slice(0, 6)
+    .map(m => ({ m, ..._jointMonthStats(m, jointIds) }));
+
+  el.innerHTML = `
+    <div class="joint-stats" style="text-align:center;margin-bottom:14px">
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:10px 8px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Solde actuel</div>
+        <div style="font-family:var(--mono);font-weight:600">${fmtE(balance)}</div></div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:10px 8px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Prélèvements fixes / mois</div>
+        <div style="font-family:var(--mono);font-weight:600;color:var(--red)">${fixed ? fmtE(fixed) : '— €'}</div></div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:10px 8px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px">Dépenses du mois</div>
+        <div style="font-family:var(--mono);font-weight:600;color:var(--red)">${fmtE(s.charges)}</div></div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:10px 8px">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:4px">À virer avant prélèvements</div>
+        <div style="font-family:var(--mono);font-weight:600;color:${need > 0 ? 'var(--amber)' : 'var(--green)'}">${need > 0 ? fmtE(need) : 'Couvert'}</div></div>
+    </div>
+    ${need > 0 ? `<div class="notif" style="margin-bottom:12px">Il manque ${fmtE(need)} pour couvrir les prélèvements fixes du compte joint : ${_esc(ownerLabel('moi'))} ${fmtE(needMoi)} · ${_esc(ownerLabel('partenaire'))} ${fmtE(needPart)} (au prorata des versements cibles).</div>`
+      : !fixed ? `<div style="font-size:11px;color:var(--text3);margin-bottom:12px">Ajoutez les prélèvements du compte joint (crédit, assurances, énergie…) dans Abonnements & crédits pour calculer le montant à virer.</div>` : ''}
+    <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px">Versements reçus en ${_fmtMonth(month)}</div>
+    ${bar('moi')}${bar('partenaire')}
+    ${s.autre > 0 ? `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">Autres entrées non attribuées : ${fmtE(s.autre)}. Ajoutez des mots-clés dans les Paramètres pour les rattacher.</div>` : ''}
+    ${hist.length ? `<div class="table-scroll" style="margin-top:6px"><table class="split-table">
+      <thead><tr><th>Mois</th><th>${_esc(ownerLabel('moi'))}</th><th>${_esc(ownerLabel('partenaire'))}</th><th>Autres</th><th>Dépenses</th><th>Variation</th></tr></thead>
+      <tbody>${hist.map(h => {
+        const v = h.moi + h.partenaire + h.autre - h.charges;
+        return `<tr><td>${_fmtMonth(h.m)}</td><td>${fmtE(h.moi)}</td><td>${fmtE(h.partenaire)}</td><td>${fmtE(h.autre)}</td>
+          <td style="color:var(--red)">${fmtE(h.charges)}</td><td style="color:${v >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtE(v)}</td></tr>`;
+      }).join('')}</tbody></table></div>` : ''}`;
 }
 
 // ── ÉPARGNE ──
@@ -2189,7 +2379,9 @@ function importTransactions(txs) {
 }
 
 function exportAppData() {
-  const data = JSON.stringify({transactions, abonnements, exportedAt: new Date().toISOString()}, null, 2);
+  const { aiApiKey, ...safeSettings } = settings;
+  const data = JSON.stringify({transactions, abonnements, accounts, creditsImmo, budget, settings: safeSettings,
+                               exportedAt: new Date().toISOString()}, null, 2);
   const blob = new Blob([data], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -2209,14 +2401,27 @@ function importAppData(input) {
       if (!Array.isArray(data.transactions) || !Array.isArray(data.abonnements)) {
         throw new Error('Format de sauvegarde invalide.');
       }
+      const parts = [`${data.transactions.length} transactions`, `${data.abonnements.length} prélèvements`];
+      if (Array.isArray(data.accounts))    parts.push(`${data.accounts.length} comptes`);
+      if (Array.isArray(data.creditsImmo)) parts.push(`${data.creditsImmo.length} crédits`);
+      if (!confirm(`Remplacer les données actuelles par : ${parts.join(', ')} ?\nPensez à exporter une sauvegarde avant.`)) {
+        input.value = '';
+        return;
+      }
       transactions = data.transactions;
       abonnements = data.abonnements;
+      if (Array.isArray(data.accounts))    accounts    = data.accounts;
+      if (Array.isArray(data.creditsImmo)) creditsImmo = data.creditsImmo;
+      if (data.budget && typeof data.budget === 'object') budget = { ...budget, ...data.budget };
+      // Les clés API ne sont jamais importées depuis un fichier
+      if (data.settings) {
+        const { aiApiKey, aiProvider, ...rest } = data.settings;
+        settings = { ...settings, ...rest };
+      }
       saveState();
-      renderDashRecent(); updateTRBalance(); updateTotalLiquidity();
-      renderTx();
-      renderAbo();
       input.value = '';
-      alert('Données restaurées.');
+      openApp();
+      alert('Données importées.');
     } catch (e) {
       alert('Import impossible : ' + e.message);
     }
@@ -2789,6 +2994,7 @@ function openApp() {
   renderDashRecent(); updateTRBalance(); updateTotalLiquidity();
   renderDashAlerts();
   renderDashAbo();
+  renderOwnerSplit();
   renderPatrimoine();
   calcBudget();
   renderAbo();
